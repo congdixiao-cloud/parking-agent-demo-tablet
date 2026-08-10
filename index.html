@@ -1,0 +1,1270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>泊弈停车智能体</title>
+  <style>
+    :root {
+      --blue: #1677ff;
+      --blue-2: #3c9cff;
+      --ink: #1f2937;
+      --muted: #7f8796;
+      --line: #e8ebf0;
+      --soft: #f7f9fc;
+      --panel: #ffffff;
+      --purple: #8b7cdb;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      color: var(--ink);
+      background: #f7f8fb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 0; background: #f7f8fb; }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    .screen { display: none; min-height: 100vh; }
+    .screen.active { display: flex; }
+    .icon { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+    .small-icon { width: 15px; height: 15px; }
+    .icon-btn, .plain-btn { border: 0; background: transparent; cursor: pointer; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; }
+    .icon-btn:hover, .plain-btn:hover { color: var(--blue); background: #eff6ff; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid rgba(22,119,255,.75); outline-offset: 2px; }
+    .toast { position: fixed; z-index: 50; left: 50%; bottom: 28px; transform: translate(-50%, 90px); padding: 10px 15px; border-radius: 8px; background: rgba(32,39,49,.93); color: #fff; font-size: 14px; box-shadow: 0 10px 28px rgba(0,0,0,.18); opacity: 0; transition: transform .2s, opacity .2s; pointer-events: none; }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+
+    /* shared navigation */
+    .sidebar { width: 280px; background: #fff; border-right: 1px solid #e6eaf0; padding: 24px 20px 20px; flex: 0 0 280px; display: flex; flex-direction: column; min-height: 100vh; }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 5px 24px; font-weight: 700; color: #263241; font-size: 18px; white-space: nowrap; }
+    .brand svg { width: 34px; height: 24px; }
+    .collapse { margin-left: auto; color: #656e7c; }
+    .nav-list { display: grid; gap: 0; }
+    .nav-section { margin-top: 18px; color: #7f8792; font-size: 13px; padding: 0 0 7px; }
+    .nav-item { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 10px; border: 0; background: transparent; border-radius: 8px; color: #4b5564; font-size: 15px; text-align: left; cursor: pointer; }
+    .nav-item:hover { background: #f4f7fb; color: #1668dc; }
+    .nav-item.active { background: #f2f5f9; color: #303a49; font-weight: 600; }
+    .nav-item .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .profile { margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 13px 8px 0; color: #606979; font-size: 15px; }
+    .avatar { width: 37px; height: 37px; border-radius: 50%; background: #f0f2f5; color: #ccd1d8; display: grid; place-items: center; }
+    .profile .chevron { margin-left: auto; color: #c0c5ce; }
+
+    /* home */
+    #home { position: relative; height: 100dvh; min-height: 0; overflow: hidden; background: #f5f7fb; }
+    #home.active { display: block; }
+    #home .sidebar { position: absolute; z-index: 20; inset: 0 auto 0 0; min-height: 0; height: 100%; overflow: hidden; box-shadow: 1px 0 0 rgba(229,233,240,.98); }
+    .home-content { display: grid; grid-template-columns: minmax(0, 1fr) 492px; gap: 24px; padding: 22px 24px 22px 0; width: 100vw; max-width: none; min-height: 0; height: 100%; overflow: hidden; }
+    .map-panel { position: relative; overflow: hidden; min-height: 0; height: 100%; background: #faf9f6 url('./assets/parking-map-v3.png') center / 100% 100% no-repeat; }
+    .vector-map { display: none; }
+    .map-panel:after { content: ""; position: absolute; z-index: 1; inset: 0; background: rgba(255,255,255,.08); pointer-events: none; }
+    .map-search { position: absolute; z-index: 4; top: 20px; left: 300px; width: 445px; min-width: 0; }
+    .map-search-row { height: 52px; display: flex; align-items: center; border-radius: 4px; background: #fff; box-shadow: 0 2px 11px rgba(27,45,71,.11); padding-left: 16px; }
+    .map-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: #7b8491; background: transparent; font-size: 16px; }
+    .map-search button { width: 38px; height: 38px; color: #6b7481; }
+    .search-popover { display: none; background: #fff; margin-top: 5px; padding: 12px 16px 14px; box-shadow: 0 4px 14px rgba(34,52,74,.15); }
+    .map-search.open .search-popover { display: grid; gap: 4px; }
+    .suggestion { width: 100%; min-width: 0; height: 39px; border: 0; border-radius: 7px; padding: 0 8px; background: transparent; display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer; color: #4e5766; font-size: 15px; white-space: nowrap; }
+    .suggestion .icon { flex: 0 0 auto; }
+    .suggestion-text { display: block; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .suggestion:hover, .suggestion.selected { background: #f3f4f6; color: #333c49; }
+    .map-label { position: absolute; z-index: 2; border: 0; border-radius: 6px; background: rgba(255,255,255,.96); padding: 7px 10px 7px 7px; color: #4a4e57; display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; box-shadow: 0 4px 11px rgba(54,61,74,.14); cursor: pointer; transition: background .18s, color .18s, transform .18s; }
+    .map-label:hover { color: var(--blue); transform: translateY(-1px); }
+    .map-label .parking { display: grid; place-items: center; width: 33px; height: 33px; color: #7b8491; background: #f1f3f6; border-radius: 7px; font-size: 24px; font-family: Arial, sans-serif; font-weight: 800; }
+    .map-label.selected { color: #4a4e57; background: #fff; box-shadow: 0 5px 15px rgba(22,119,255,.22); }
+    .map-label.selected .parking { color: #fff; background: var(--blue); }
+    .label-a { top: 28%; right: 4%; }
+    .label-b { top: 51%; left: 25%; }
+    .label-c { top: 59%; left: 39%; }
+    .label-d { top: 72%; left: 31%; }
+    .parking-detail { position: absolute; z-index: 5; top: 96px; left: 300px; width: 445px; padding: 18px 20px 20px; border-radius: 12px; background: rgba(255,255,255,.97); box-shadow: 0 9px 26px rgba(34,48,73,.15); color: #313b4a; }
+    .parking-detail[hidden] { display: none; }
+    .detail-name { margin: 0; padding-bottom: 15px; border-bottom: 1px solid #eaedf2; color: #1677ff; font-size: 18px; line-height: 1.4; }
+    .detail-list { display: grid; gap: 10px; padding: 16px 0 18px; border-bottom: 1px solid #eaedf2; font-size: 15px; }
+    .detail-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); line-height: 1.45; }
+    .detail-row dt { color: #778191; }
+    .detail-row dd { margin: 0; color: #394454; }
+    .fee-title { margin: 17px 0 12px; color: #667180; font-size: 15px; }
+    .fee-tabs { display: grid; grid-template-columns: repeat(3,1fr); padding: 4px; border-radius: 10px; background: #f0eff3; }
+    .fee-tabs button { height: 34px; border: 0; border-radius: 8px; color: #4e5867; background: transparent; cursor: pointer; }
+    .fee-tabs button.active { color: #232d3b; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.12); }
+    .fee-copy { margin: 16px 0 0; color: #414b59; font-size: 14px; line-height: 1.9; }
+    .fee-copy span { display: block; }
+    .application-board { position: absolute; z-index: 3; left: 300px; right: 20px; bottom: 20px; padding: 18px 20px 20px; border-radius: 14px; background: rgba(255,255,255,.97); box-shadow: 0 5px 20px rgba(35,52,77,.09); }
+    .board-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; font-weight: 700; font-size: 19px; }
+    .expand-btn { border: 0; background: transparent; color: #7a8493; cursor: pointer; font-size: 14px; }
+    .app-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+    .app-card { height: 106px; min-height: 0; padding: 16px; border: 1px solid #e8ebf0; border-radius: 8px; background: #fff; cursor: pointer; text-align: left; transition: .16s; }
+    .app-card:hover { border-color: #9dc6ff; box-shadow: 0 5px 14px rgba(22,119,255,.12); transform: translateY(-2px); }
+    .app-card-title { display: flex; align-items: center; gap: 10px; font-size: 16px; color: #354052; font-weight: 650; white-space: nowrap; }
+    .app-card-title .card-icon { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 7px; font-size: 18px; }
+    .app-card small { display: block; margin-top: 13px; color: #89919e; font-size: 13px; }
+    .blue-bg { background: #e6f1ff; color: #388cff; }
+    .purple-bg { background: #efecff; color: #8b7cdb; }
+    .orange-bg { background: #fff2da; color: #f2a532; }
+    .green-bg { background: #dff9e8; color: #3ccf78; }
+    .red-bg { background: #ffe6e8; color: #ff6b6b; }
+    .right-panel { display: grid; grid-template-rows: 296px minmax(0, 1fr); gap: 17px; min-height: 0; height: 100%; overflow: hidden; }
+    .metric-card, .assistant-card { background: #fff; border-radius: 13px; box-shadow: 0 3px 12px rgba(38,52,73,.045); }
+    .metric-card { min-height: 0; height: 296px; padding: 16px; overflow: hidden; border-radius: 13px; }
+    .date-row { display: flex; align-items: center; gap: 8px; padding-bottom: 13px; border-bottom: 1px solid #f0f1f3; color: #687383; font-size: 16px; white-space: nowrap; }
+    .refresh { margin-left: auto; color: var(--blue); border: 0; background: transparent; cursor: pointer; font-size: 15px; }
+    .volume { display: flex; align-items: center; padding: 16px 2px 14px; font-size: 18px; white-space: nowrap; }
+    .digit-wrap { display: flex; gap: 12px; margin-left: auto; }
+    .digit { width: 40px; height: 62px; display: grid; place-items: center; background: #f8fafc; color: #1e7be7; font-size: 36px; font-weight: 700; font-family: "DIN Alternate", Arial, sans-serif; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .metric { width: 100%; height: 132px; min-height: 0; padding: 18px 16px; border: 0; border-radius: 4px; background: #f9fbfe; text-align: left; cursor: pointer; }
+    .metric:hover { background: #f2f7ff; box-shadow: inset 0 0 0 1px #cfe4ff; }
+    .metric-title { display: flex; align-items: center; gap: 5px; color: #4c5767; font-size: 16px; }
+    .metric-title span { margin-left: auto; color: #a1a8b4; font-size: 13px; }
+    .metric-value { display: block; margin-top: 12px; color: #243044; font-size: 36px; font-weight: 700; }
+    .metric-value b { font-size: 21px; }
+    .metric-delta { display: block; margin-top: 5px; font-size: 14px; color: #9098a5; }
+    .metric-delta.minus { color: #fa6a77; }
+    .metric-delta.plus { color: #32b97f; }
+    .metric-delta i { margin-left: 4px; color: #9098a5; font-style: normal; }
+    .assistant-card { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+    .assistant-greeting { min-height: 80px; padding: 18px; position: relative; overflow: hidden; background: linear-gradient(106deg,#fff 0%,#f3f8ff 100%); }
+    .assistant-greeting:after { content: ""; position: absolute; right: 28px; top: 19px; width: 106px; height: 48px; opacity: .25; border: 7px solid #d9eaff; border-radius: 28px 36px 12px 12px; transform: skewX(-16deg); }
+    .greeting-title { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; color: #263855; font-size: 17px; font-weight: 700; }
+    .bot { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #edf6ff; color: #1976db; font-size: 17px; }
+    .assistant-greeting small { position: relative; z-index: 1; display: block; margin: 4px 0 0 42px; color: #8c95a2; font-size: 13px; }
+    .guess-head { display: flex; align-items: center; min-height: 58px; padding: 20px 18px 14px; color: #8b94a2; font-size: 16px; }
+    .guess-head button { border: 0; background: transparent; margin-left: auto; color: var(--blue); cursor: pointer; }
+    .questions { display: grid; flex: 1 1 auto; min-height: 0; overflow: auto; gap: 14px; padding: 0 18px; }
+    .question { min-height: 54px; padding: 0 14px; display: flex; align-items: center; text-align: left; border: 0; border-radius: 8px; background: #fafbfe; color: #515a67; cursor: pointer; font-size: 14px; }
+    .question:hover { color: #1668dc; background: #eff6ff; }
+    .question b { margin-left: auto; font-size: 21px; font-weight: 400; color: #7f8794; }
+    .chat-box { margin: auto 18px 18px; height: 192px; border: 2px solid transparent; border-radius: 18px; padding: 16px; position: relative; display: flex; flex-direction: column; background: linear-gradient(#fff,#fff) padding-box, linear-gradient(105deg,#b8c8ff 0%,#e2c4ff 50%,#a8eafb 100%) border-box; }
+    .chat-input { flex: 1; width: 100%; min-height: 54px; padding: 0; border: 0; outline: 0; resize: none; background: transparent; color: #465160; font-size: 16px; line-height: 1.55; }
+    .chat-input::placeholder { color: #a3a9b2; }
+    .chat-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+    .model-select { width: 145px; flex: 0 0 145px; }
+    .model-select .ant-select-trigger { height: 34px; border-color: #e3e7ed; border-radius: 4px; color: #777f8c; font-size: 13px; }
+    .model-select .ant-select-option { min-height: 32px; font-size: 13px; }
+    .chat-foot .ant-select-dropdown { top: auto; bottom: calc(100% + 4px); }
+    .paperclip { margin-left: auto; color: #292f38; }
+    .send { width: 34px; height: 34px; border: 0; border-radius: 50%; background: #6bb5ff; color: #fff; cursor: pointer; font-size: 17px; }
+    .send:hover { background: var(--blue); }
+
+    /* first-load / refresh skeleton */
+    .home-loading { position: absolute; z-index: 40; inset: 0; display: none; overflow: hidden; background: #f5f7fb; }
+    .home-loading.active { display: block; }
+    /* The loading layer deliberately reuses the home canvas geometry: the
+       navigation sits above the map instead of claiming a grid column. */
+    .skeleton-home-content { display: grid; grid-template-columns: minmax(0, 1fr) 492px; gap: 24px; width: 100vw; height: 100%; min-height: 0; padding: 22px 24px 22px 0; overflow: hidden; }
+    .skeleton-nav { position: absolute; z-index: 2; inset: 0 auto 0 0; width: 280px; height: 100%; overflow: hidden; background: #fff; padding: 24px 20px 20px; box-shadow: 1px 0 0 rgba(229,233,240,.98); }
+    .skeleton-map { position: relative; min-height: 0; height: 100%; overflow: hidden; background: #edf1f6; }
+    .skeleton-right { display: grid; grid-template-rows: 296px minmax(0,1fr); gap: 17px; min-height: 0; height: 100%; overflow: hidden; }
+    .skeleton-card { padding: 16px; border-radius: 13px; background: #fff; }
+    .skeleton-shimmer { overflow: hidden; border-radius: 7px; background: linear-gradient(90deg,#f0f2f5 0%,#f7f8fa 38%,#eef0f3 56%,#f0f2f5 100%); background-size: 200% 100%; animation: skeleton-shimmer 1.35s ease-in-out infinite; }
+    .skeleton-brand { width: 166px; height: 26px; margin-bottom: 31px; }
+    .skeleton-nav-line { width: 100%; height: 40px; margin-bottom: 5px; }
+    .skeleton-nav-line.short { width: 68%; margin-top: 20px; }
+    .skeleton-search { position: absolute; z-index: 2; top: 20px; left: 300px; width: 445px; height: 52px; }
+    .skeleton-map-road { position: absolute; z-index: 0; width: 130%; height: 26px; border-radius: 100%; background: #dfe2f6; transform: rotate(-17deg); opacity: .8; }
+    .skeleton-map-road.one { top: 38%; left: -10%; }
+    .skeleton-map-road.two { top: 63%; left: -10%; transform: rotate(9deg); }
+    .skeleton-map-road.three { top: 72%; left: -15%; transform: rotate(-29deg); }
+    .skeleton-board { position: absolute; z-index: 2; right: 20px; bottom: 20px; left: 300px; height: 183px; padding: 18px 20px 20px; border-radius: 14px; background: rgba(255,255,255,.92); }
+    .skeleton-board-title { width: 92px; height: 23px; margin-bottom: 16px; }
+    .skeleton-board-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 16px; }
+    .skeleton-board-item { height: 106px; }
+    .skeleton-line { height: 16px; margin-bottom: 14px; }
+    .skeleton-line.wide { width: 78%; }
+    .skeleton-line.mid { width: 56%; }
+    .skeleton-stat-top { width: 52%; height: 19px; margin-bottom: 23px; }
+    .skeleton-stat-number { width: 100%; height: 58px; margin-bottom: 16px; }
+    .skeleton-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .skeleton-stat-grid > div { height: 130px; }
+    .skeleton-assistant-card { display: flex; min-height: 0; flex-direction: column; padding: 0; overflow: hidden; }
+    .skeleton-assistant-head { flex: 0 0 80px; height: 80px; margin: 0; border-radius: 0; }
+    .skeleton-guess { flex: 0 0 58px; height: 58px; margin: 0 18px; }
+    .skeleton-question-list { display: grid; flex: 1 1 auto; min-height: 0; gap: 14px; padding: 0 18px; overflow: hidden; }
+    .skeleton-question { height: 54px; margin: 0; }
+    .skeleton-composer { flex: 0 0 192px; height: 192px; margin: 18px; margin-top: auto; }
+    @keyframes skeleton-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+    @media (prefers-reduced-motion: reduce) { .skeleton-shimmer { animation: none; } }
+
+    /* analysis configuration */
+    .thin-rail { width: 88px; flex: 0 0 88px; border-right: 1px solid #e5e8ed; background: #fff; padding: 30px 18px; display: flex; flex-direction: column; align-items: center; gap: 26px; }
+    .rail-button { width: 42px; height: 42px; color: #647080; border: 0; background: transparent; border-radius: 9px; display: grid; place-items: center; cursor: pointer; }
+    .rail-button.active, .rail-button:hover { color: #526273; background: #f4f7fb; }
+    .rail-user { margin-top: auto; color: #d4d9df; }
+    .analysis-main { min-width: 0; flex: 1; background: #fff; position: relative; }
+    .back-link { position: absolute; top: 20px; left: 38px; display: inline-flex; align-items: center; gap: 8px; color: #586270; border: 0; background: transparent; cursor: pointer; font-size: 15px; }
+    .analysis-hero { width: min(1050px, calc(100% - 64px)); margin: 0 auto; padding-top: 225px; }
+    .analysis-title { margin: 0; display: flex; align-items: center; justify-content: center; gap: 13px; font-weight: 700; font-size: 34px; color: #202d40; }
+    .analysis-title .title-icon { width: 37px; height: 37px; display: grid; place-items: center; color: var(--purple); background: #f3f0ff; border-radius: 7px; font-size: 20px; }
+    .analysis-subtitle { margin: 16px 0 64px; text-align: center; color: #8c95a3; font-size: 24px; }
+    .prompt-shell { position: relative; margin: 0 auto; width: 100%; height: 151px; padding: 16px 16px 54px; overflow: visible; border: 1px solid #e0e5eb; border-radius: 20px; box-shadow: 0 4px 12px rgba(31,55,86,.04); color: #586270; font-size: 16px; line-height: 1.8; }
+    .prompt-copy { display: grid; align-content: start; gap: 0; }
+    .prompt-line { display: flex; align-items: center; min-width: 0; height: 32px; white-space: nowrap; }
+    .prompt-line--lead { gap: 12px; }
+    .prompt-line--lead > span:first-child { margin-right: 4px; }
+    .ant-select.prompt-inline-select { position: relative; display: block; flex: 0 0 243px; width: 243px; margin: 0; line-height: 1; }
+    .ant-select.prompt-inline-select.date-select { flex-basis: 345px; width: 345px; }
+    .ant-select { position: relative; width: 100%; }
+    .ant-select-trigger { width: 100%; height: 37px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 11px; border: 1px solid #d9dde5; border-radius: 7px; color: #9aa2ae; background: #fff; font: inherit; font-size: 16px; text-align: left; cursor: pointer; transition: border-color .18s, box-shadow .18s, background .18s; }
+    .prompt-inline-select .ant-select-trigger { height: 32px; padding: 0 10px; color: #566171; font-size: 14px; border-radius: 5px; }
+    .ant-select-trigger:hover { border-color: #4096ff; }
+    .ant-select.open .ant-select-trigger, .ant-select-trigger:focus-visible { border-color: var(--blue); outline: 0; box-shadow: 0 0 0 2px rgba(22,119,255,.16); }
+    .ant-select-value { overflow: hidden; min-width: 0; white-space: nowrap; text-overflow: ellipsis; }
+    .ant-select-arrow { flex: 0 0 auto; width: 16px; height: 16px; color: #8d95a3; transition: transform .18s; }
+    .ant-select.open .ant-select-arrow { transform: rotate(180deg); }
+    .ant-select-dropdown { position: absolute; z-index: 80; top: calc(100% + 4px); left: 0; min-width: 100%; padding: 4px; overflow: hidden; border-radius: 8px; background: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+    .ant-select-option { width: 100%; min-height: 36px; display: flex; align-items: center; padding: 7px 12px; border: 0; border-radius: 5px; color: #4e5969; background: transparent; font: inherit; font-size: 14px; line-height: 1.45; text-align: left; cursor: pointer; }
+    .ant-select-option:hover { background: #f5f5f5; }
+    .ant-select-option.selected { color: var(--blue); background: #e6f4ff; font-weight: 500; }
+    .prompt-tools { position: absolute; bottom: 15px; left: 16px; display: flex; gap: 12px; }
+    .mode-pill { height: 36px; min-width: 163px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 20px; border: 1px solid #edf0f4; border-radius: 6px; background: #f8fafc; cursor: pointer; color: #556070; }
+    .mode-pill b { color: var(--blue); padding: 5px 10px; border-radius: 5px; background: #fff; }
+    .custom-mode { min-width: 96px; padding: 0 12px; justify-content: center; gap: 7px; background: #fff; }
+    .custom-mode.is-open { color: var(--blue); border-color: #91caff; background: #f0f7ff; }
+    .prompt-send { position: absolute; right: 15px; bottom: 15px; display: flex; align-items: center; gap: 22px; }
+    .send-circle { width: 38px; height: 38px; border: 0; border-radius: 50%; background: #72baff; color: #fff; cursor: pointer; font-size: 19px; }
+    .send-circle:hover { background: var(--blue); }
+    .config-popover { position: relative; z-index: 20; width: 595px; margin: -8px auto 0; padding: 18px; border-radius: 0 0 13px 13px; background: #fff; box-shadow: 0 8px 24px rgba(31,44,66,.11); }
+    .config-popover[hidden] { display: none; }
+    .config-popover h2 { margin: 0 0 15px; font-size: 17px; }
+    .range-box { padding: 14px 11px 13px; border-radius: 7px; background: #f7f9fc; }
+    .field-label { display: block; color: #576271; font-size: 14px; margin-bottom: 10px; }
+    .range-line { display: flex; gap: 13px; align-items: center; }
+    .range-line input { width: 100%; accent-color: var(--blue); }
+    .step-btn { width: 36px; height: 34px; border: 1px solid #dde2e9; border-radius: 6px; background: #fff; cursor: pointer; font-size: 20px; color: #586270; }
+    .range-number { width: 54px; height: 34px; display: grid; place-items: center; border: 1px solid #dde2e9; border-radius: 6px; background: #fff; font-size: 14px; }
+    .range-legend { display: flex; justify-content: space-between; margin-top: 9px; color: #9ca4af; font-size: 13px; }
+    .select-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin-top: 18px; }
+    .switch-row { display: flex; align-items: center; padding-top: 17px; }
+    .switch-copy { display: grid; gap: 4px; }
+    .switch-copy small { color: #9ca4af; font-size: 12px; }
+    .switch { margin-left: auto; appearance: none; width: 46px; height: 25px; border-radius: 999px; background: #c9cdd3; cursor: pointer; position: relative; transition: .2s; }
+    .switch:after { content: ""; position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+    .switch:checked { background: var(--blue); }
+    .switch:checked:after { transform: translateX(21px); }
+
+    /* result: a quiet, progressive AI-analysis workspace */
+    #result { background: #fff; }
+    .result-body { min-width: 0; flex: 1; display: grid; grid-template-columns: 764px minmax(0, 1fr); }
+    .conversation { min-width: 0; height: 100dvh; border-right: 1px solid #e6e9ee; padding: 21px 28px 24px; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
+    .history-link { align-self: flex-end; display: inline-flex; align-items: center; gap: 6px; color: #4d5968; border: 0; background: transparent; cursor: pointer; }
+    .conversation-feed { min-height: 0; flex: 1; overflow: auto; padding: 0 3px 18px 0; scrollbar-width: thin; scrollbar-color: #e4e8ed transparent; }
+    .user-bubble { width: fit-content; max-width: 90%; margin: 53px auto 25px; padding: 14px 17px; border-radius: 12px; background: #f6f8fa; color: #566171; font-size: 16px; }
+    .analysis-done { width: 100%; padding: 15px 16px; min-height: 56px; border: 1px solid #e6e9ee; border-radius: 11px; color: #9099a6; background: #fff; text-align: left; cursor: pointer; }
+    .analysis-done:hover { border-color: #9dc6ff; color: var(--blue); }
+    .ai-brief { margin: 18px 0 14px; color: #404b5b; line-height: 1.8; font-size: 16px; }
+    .thinking-card { margin-top: 10px; padding: 14px 16px 13px; border: 1px solid #e7ecf5; border-radius: 12px; background: linear-gradient(130deg,#fafcff 0%,#f7f8ff 52%,#fcfbff 100%); box-shadow: 0 4px 18px rgba(64,91,145,.06); transition: padding .28s ease, border-color .28s ease, background .28s ease; }
+    .thinking-head { display: flex; align-items: center; gap: 9px; color: #43516a; font-size: 14px; font-weight: 650; }
+    .thinking-orb { width: 20px; height: 20px; border-radius: 50%; background: conic-gradient(from 110deg,#62a9ff,#a38bff,#e8b8ff,#62a9ff); box-shadow: 0 0 0 4px rgba(109,162,255,.1); animation: ai-orbit 2.4s linear infinite; }
+    .thinking-dots { display: inline-flex; gap: 3px; margin-left: 2px; }
+    .thinking-dots i { width: 4px; height: 4px; border-radius: 50%; background: #7da9ec; animation: ai-dot 1.15s ease-in-out infinite; }
+    .thinking-dots i:nth-child(2) { animation-delay: .15s; }
+    .thinking-dots i:nth-child(3) { animation-delay: .3s; }
+    .thinking-status { margin: 10px 0 0 29px; min-height: 18px; color: #778296; font-size: 13px; line-height: 1.5; }
+    .thinking-steps { display: grid; gap: 6px; margin: 11px 0 0 29px; color: #9aa3b1; font-size: 12px; }
+    .thinking-step { display: flex; align-items: center; gap: 7px; opacity: .35; transform: translateY(2px); transition: opacity .28s ease, transform .28s ease, color .28s ease; }
+    .thinking-step:before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #c3cad7; }
+    .thinking-step.active { opacity: 1; transform: translateY(0); color: #69768c; }
+    .thinking-step.active:before { background: #6caeff; box-shadow: 0 0 0 3px rgba(108,174,255,.12); }
+    #result.ai-complete .thinking-card { padding-bottom: 12px; border-color: #d8e7fb; background: #f9fcff; }
+    #result.ai-complete .thinking-orb { animation-play-state: paused; background: #61b88d; }
+    #result.ai-complete .thinking-dots { display: none; }
+    .ai-stream { display: grid; gap: 10px; margin-top: 15px; }
+    .ai-stream:empty { display: none; }
+    .ai-stream-line { margin: 0; padding: 12px 14px; border-left: 2px solid #9ec8ff; border-radius: 0 9px 9px 0; background: #fbfdff; color: #4d596b; font-size: 14px; line-height: 1.7; animation: ai-reveal .32s ease both; }
+    .ai-stream-line strong { color: #276fcb; font-weight: 600; }
+    .report-ref { display: flex; align-items: center; gap: 12px; margin-top: 17px; padding: 11px 14px; border: 1px solid #e5e8ed; border-radius: 11px; background: #fff; cursor: pointer; opacity: 0; transform: translateY(7px); transition: border-color .18s, box-shadow .18s, opacity .35s ease, transform .35s ease; pointer-events: none; }
+    #result.ai-complete .report-ref { opacity: 1; transform: translateY(0); pointer-events: auto; transition-delay: .1s; }
+    .report-ref:hover { border-color: #94c2fb; box-shadow: 0 4px 13px rgba(22,119,255,.08); }
+    .thumb { width: 56px; height: 56px; border-radius: 7px; background: linear-gradient(145deg,#5d8a9b 0 22%,#e4edf1 22% 42%,#294f68 42% 70%,#b9c9d0 70%); }
+    .report-ref b { display: block; font-size: 15px; color: #425064; }
+    .report-ref small { color: #a1a8b2; }
+    .chat-buttons { margin-top: 20px; opacity: 0; transform: translateY(7px); transition: opacity .35s ease, transform .35s ease; pointer-events: none; }
+    #result.ai-complete .chat-buttons { opacity: 1; transform: translateY(0); pointer-events: auto; transition-delay: .2s; }
+    .quick-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .quick-actions button, .followup-actions button { min-height: 38px; padding: 0 15px; border: 0; border-radius: 9px; background: #f5f7fa; color: #5d6878; cursor: pointer; }
+    .quick-actions button:hover, .followup-actions button:hover { color: var(--blue); background: #eef6ff; }
+    .followup-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 20px; }
+    .result-chat { flex: 0 0 150px; height: 150px; margin-top: auto; border: 2px solid #deebfb; border-radius: 18px; padding: 17px; display: flex; flex-direction: column; background: #fff; }
+    .result-chat .chat-foot { margin-top: auto; }
+    .result-document { position: relative; min-width: 0; height: 100dvh; padding: 24px 38px 40px 215px; overflow: auto; scroll-behavior: smooth; }
+    .result-actions { display: flex; justify-content: flex-end; align-items: center; gap: 18px; color: #4f5967; }
+    .result-actions button { display: inline-flex; gap: 6px; align-items: center; border: 0; background: transparent; color: inherit; cursor: pointer; }
+    .result-actions button:hover { color: var(--blue); }
+    .result-report-stage { max-width: 768px; min-height: calc(100% - 44px); margin: 0 auto; }
+    .report-generating { display: grid; place-items: center; min-height: 650px; color: #94a0b1; text-align: center; transition: opacity .3s ease, visibility .3s ease; }
+    .report-generating .report-spinner { width: 34px; height: 34px; margin: 0 auto 15px; border: 3px solid #e5efff; border-top-color: #5da7ff; border-radius: 50%; animation: result-spin 1s linear infinite; }
+    .report-generating b { display: block; color: #657287; font-size: 15px; font-weight: 600; }
+    .report-generating small { display: block; margin-top: 7px; color: #a3acb9; }
+    .report-content { display: none; opacity: 0; transform: translateY(10px); transition: opacity .45s ease, transform .45s ease; }
+    #result.ai-complete .report-generating { position: absolute; visibility: hidden; opacity: 0; pointer-events: none; }
+    #result.ai-complete .report-content { display: block; opacity: 1; transform: translateY(0); }
+    .result-title { margin: 52px 0 15px; color: #283548; font-size: 22px; line-height: 1.4; }
+    .result-meta { display: flex; flex-wrap: wrap; gap: 16px 35px; color: #a0a7b0; font-size: 15px; }
+    .map-drop { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 60px; margin-top: 17px; padding: 0 22px; border: 0; border-radius: 7px; background: #f7f9fb; color: #969eaa; cursor: pointer; text-align: left; }
+    .map-drop:hover, .map-drop[aria-expanded="true"] { color: var(--blue); background: #f2f7ff; }
+    .map-drop b { margin-left: auto; color: #5f6876; transition: transform .2s ease; }
+    .map-drop[aria-expanded="true"] b { transform: rotate(180deg); }
+    .report-map-panel { position: relative; overflow: hidden; height: 218px; margin-top: 8px; border: 1px solid #e6ebf2; border-radius: 9px; background: #fbfbf7 url('./assets/parking-map-v3.png') center / 100% 100% no-repeat; box-shadow: 0 8px 20px rgba(36,63,96,.08); }
+    .report-map-panel[hidden] { display: none; }
+    .mini-map { width: 100%; height: 100%; display: block; }
+    .mini-map .minor { fill: none; stroke: #e6e5f2; stroke-width: 2.3; }
+    .mini-map .major { fill: none; stroke: #c7c9ef; stroke-width: 9; stroke-linecap: round; }
+    .mini-map .river { fill: none; stroke: #5ec7e4; stroke-width: 16; opacity: .9; }
+    .mini-map .park { fill: #e6f3c7; opacity: .85; }
+    .report-map-panel .mini-map > rect, .report-map-panel .mini-map .minor, .report-map-panel .mini-map .major, .report-map-panel .mini-map .river, .report-map-panel .mini-map .park { opacity: 0; }
+    .mini-map .map-marker { cursor: pointer; }
+    .mini-map .map-marker circle { fill: #1677ff; stroke: #fff; stroke-width: 3; filter: drop-shadow(0 2px 3px rgba(22,119,255,.25)); }
+    .mini-map .map-marker text { fill: #fff; font-size: 14px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+    .mini-map .map-marker:hover circle, .mini-map .map-marker:focus circle { fill: #0958d9; transform: scale(1.12); transform-origin: center; }
+    .mini-map-caption { position: absolute; right: 11px; bottom: 10px; padding: 5px 8px; border-radius: 5px; background: rgba(255,255,255,.9); color: #738095; font-size: 12px; box-shadow: 0 2px 8px rgba(32,47,69,.1); }
+    .doc-tabs { position: sticky; z-index: 6; top: 0; display: flex; width: fit-content; margin: 23px 0 0; padding: 7px 3px 7px 0; background: rgba(255,255,255,.96); backdrop-filter: blur(8px); }
+    .doc-tabs-inner { display: flex; padding: 3px; border-radius: 5px; background: #f4f5f7; }
+    .doc-tabs button { height: 38px; padding: 0 16px; border: 0; border-radius: 4px; color: #747e8c; background: transparent; cursor: pointer; }
+    .doc-tabs button.active { color: #344154; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.06); }
+    .doc-section { max-width: 768px; scroll-margin-top: 70px; }
+    .doc-section h2 { margin: 26px 0 17px; color: #2f3c4d; font-size: 21px; }
+    .doc-section > p { margin: 0 0 18px; color: #3f4a59; font-size: 16px; line-height: 1.75; }
+    .pattern-card { margin: 16px 0; padding: 15px 22px; border-radius: 8px; background: #f7f9fb; color: #4f5a68; line-height: 1.7; transition: background .18s ease, transform .18s ease; }
+    .pattern-card:hover { background: #f2f7ff; transform: translateX(2px); }
+    .pattern-card b { color: #303c4d; }
+    .pattern-card span { color: #2582e8; }
+    .composition-chart { display: grid; grid-template-columns: 280px minmax(0,1fr); align-items: center; gap: 18px; margin: 26px 0 4px; padding: 18px 24px; border-radius: 9px; background: #f7f9fb; }
+    .donut-visual { position: relative; width: 190px; height: 190px; justify-self: center; border: 0; border-radius: 50%; background: conic-gradient(#ffd21f 0 26%,#fb7879 26% 51%,#76cfe2 51% 66%,#81a9ee 66% 77%,#8662df 77% 84%,#54bd3d 84% 90%,#4bc49f 90% 96%,#ffaf1b 96% 100%); cursor: pointer; transition: transform .22s ease, box-shadow .22s ease; }
+    .donut-visual:before { content: ""; position: absolute; inset: 31px; border-radius: 50%; background: #f7f9fb; }
+    .donut-visual:hover { transform: scale(1.035); box-shadow: 0 6px 20px rgba(62,110,184,.18); }
+    .donut-hole { position: absolute; z-index: 1; inset: 36px; display: grid; place-content: center; color: #526076; line-height: 1.35; text-align: center; }
+    .donut-hole b { color: #29394e; font-size: 25px; }
+    .donut-hole small { margin-top: 2px; font-size: 13px; }
+    .chart-legend { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 12px; }
+    .chart-legend button { display: flex; align-items: center; gap: 7px; min-width: 0; height: 27px; padding: 0 5px; border: 0; border-radius: 5px; background: transparent; color: #758093; cursor: pointer; text-align: left; font-size: 13px; }
+    .chart-legend button:hover, .chart-legend button.active { color: #33445a; background: rgba(255,255,255,.84); }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--legend-color); }
+    .legend-name { overflow: hidden; flex: 1; white-space: nowrap; text-overflow: ellipsis; }
+    .trend-card, .heatmap-card { position: relative; overflow: hidden; margin: 20px 0; padding: 20px 24px 18px; border-radius: 9px; background: #f7f9fb; }
+    .trend-svg { width: 100%; height: 242px; display: block; overflow: visible; }
+    .trend-svg .grid { stroke: #dfe4eb; stroke-width: 1; stroke-dasharray: 3 3; }
+    .trend-svg .axis-label { fill: #9aa4b1; font-size: 11px; }
+    .trend-svg .area { fill: url(#trendFill); opacity: .68; }
+    .trend-svg .line { fill: none; stroke: #398cf8; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .trend-point { fill: #fff; stroke: #398cf8; stroke-width: 2.5; cursor: pointer; transition: r .16s ease, fill .16s ease; }
+    .trend-point:hover, .trend-point.active { fill: #398cf8; r: 6; }
+    .chart-tooltip { position: absolute; top: 19px; right: 25px; min-width: 120px; padding: 9px 11px; border-radius: 6px; background: #fff; color: #677286; box-shadow: 0 4px 15px rgba(43,61,88,.12); font-size: 12px; line-height: 1.65; }
+    .chart-tooltip b { color: #3e4b5e; }
+    .heatmap-card { padding-top: 23px; }
+    .heatmap-title { margin: 0 0 16px; color: #697587; font-size: 13px; }
+    .heatmap-layout { display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 8px; }
+    .heatmap-rows { display: grid; grid-template-rows: repeat(8,14px); gap: 5px; padding-top: 1px; color: #8d97a5; font-size: 11px; text-align: right; }
+    .heat-grid { display: grid; grid-template-columns: repeat(20,minmax(0,1fr)); grid-template-rows: repeat(8,14px); gap: 5px; }
+    .heat-cell { min-width: 0; padding: 0; border: 0; border-radius: 2px; background: #ffe2d3; cursor: pointer; transition: transform .13s ease, box-shadow .13s ease; }
+    .heat-cell.level-1 { background: #ffd2b8; }
+    .heat-cell.level-2 { background: #ffab78; }
+    .heat-cell.level-3 { background: #ff722b; }
+    .heat-cell:hover, .heat-cell.active { transform: scale(1.22); box-shadow: 0 0 0 2px rgba(255,107,43,.22); z-index: 2; }
+    .heat-times { display: flex; justify-content: space-between; margin: 10px 2px 0 56px; color: #8d97a5; font-size: 11px; }
+    .heat-legend { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 15px; color: #9aa3ae; font-size: 11px; }
+    .heat-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; background: #ffd2b8; }
+    .heat-legend i.mid { background: #ffab78; }.heat-legend i.high { background: #ff722b; }
+    .heat-tooltip { min-height: 32px; margin: 15px 0 0 56px; color: #708097; font-size: 12px; }
+    .heat-tooltip b { color: #3e4d61; }
+    .conclusion-list { display: grid; gap: 12px; margin: 0; padding-left: 24px; color: #4e5968; font-size: 16px; line-height: 1.65; }
+    .conclusion-list li::marker { color: #61a2ef; }
+    .doc-scroll { display: none; }
+    @keyframes ai-orbit { to { transform: rotate(360deg); } }
+    @keyframes ai-dot { 0%,80%,100% { transform: translateY(0); opacity: .42; } 40% { transform: translateY(-3px); opacity: 1; } }
+    @keyframes ai-reveal { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes result-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .thinking-orb,.thinking-dots i,.report-generating .report-spinner { animation: none; }.ai-stream-line { animation: none; } }
+    @media (max-width: 1400px) {
+      #home .sidebar { width: 280px; flex-basis: 280px; }
+      #home .home-content { width: 100vw; grid-template-columns: minmax(0, 1fr) 492px; }
+      #home .app-cards { gap: 16px; }
+      #home .app-card { height: 106px; padding: 16px; }
+      #home .app-card-title { font-size: 16px; }
+      #home .app-card small { font-size: 13px; }
+      .result-document { padding-left: 100px; }
+    }
+    /*
+      Tablet release: use the real viewport instead of scaling a desktop
+      canvas.  This is intentional: WebKit does not reliably compensate vw
+      values inside a zoomed element, which leaves an empty right-hand area.
+    */
+    @media (min-width: 781px) and (max-width: 1200px) {
+      html, body { width: 100%; height: 100%; overflow: hidden; }
+
+      /* Home: compact rail + native two-column grid */
+      #home { zoom: 1; width: 100vw; height: 100dvh; }
+      #home .sidebar, .skeleton-nav { width: 76px; flex-basis: 76px; padding: 16px 10px; }
+      #home .sidebar .brand { justify-content: center; padding: 0 0 20px; gap: 0; }
+      #home .sidebar .brand > span, #home .sidebar .collapse, #home .sidebar .nav-section { display: none; }
+      #home .sidebar .nav-item { justify-content: center; gap: 0; padding: 0; font-size: 0; }
+      #home .sidebar .nav-item .icon { width: 18px; height: 18px; }
+      #home .sidebar .profile { justify-content: center; padding: 12px 0 0; }
+      #home .sidebar .profile > span:not(.avatar) { display: none; }
+
+      #home .home-content, .skeleton-home-content {
+        width: 100%;
+        grid-template-columns: minmax(0, 1fr) clamp(352px, 39vw, 430px);
+        gap: 16px;
+        padding: 16px 16px 16px 0;
+      }
+      .right-panel, .skeleton-right { grid-template-rows: 238px minmax(0, 1fr); gap: 14px; }
+      .map-search, .skeleton-search { top: 16px; left: 94px; width: min(360px, calc(100% - 118px)); }
+      .map-search-row { height: 48px; }
+      .parking-detail { top: 82px; left: 94px; width: min(390px, calc(100% - 118px)); padding: 15px 16px 17px; }
+      .map-label { padding: 6px 8px 6px 6px; gap: 6px; font-size: 12px; }
+      .map-label .parking { width: 28px; height: 28px; font-size: 20px; }
+
+      .application-board, .skeleton-board { left: 94px; right: 16px; bottom: 16px; height: 146px; padding: 14px; }
+      .board-head { margin-bottom: 11px; font-size: 17px; }
+      .app-cards, .skeleton-board-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(158px, 1fr); gap: 11px; overflow-x: auto; scrollbar-width: thin; }
+      .app-card, .skeleton-board-item { height: 88px; min-width: 158px; padding: 12px; }
+      .app-card-title { gap: 8px; font-size: 14px; }
+      .app-card-title .card-icon { width: 26px; height: 26px; font-size: 15px; }
+      .app-card small { margin-top: 9px; font-size: 11px; }
+
+      .metric-card { height: 238px; padding: 14px; }
+      .date-row { padding-bottom: 10px; font-size: 14px; }
+      .refresh { font-size: 13px; }
+      .volume { padding: 10px 1px; font-size: 16px; }
+      .digit-wrap { gap: 7px; }
+      .digit { width: 31px; height: 45px; font-size: 28px; }
+      .metric-grid { gap: 10px; }
+      .metric { height: 108px; padding: 13px 12px; }
+      .metric-title { font-size: 13px; }
+      .metric-title span { font-size: 11px; }
+      .metric-value { margin-top: 9px; font-size: 29px; }
+      .metric-value b { font-size: 17px; }
+      .metric-delta { margin-top: 3px; font-size: 12px; }
+      .assistant-greeting { min-height: 68px; padding: 14px; }
+      .greeting-title { gap: 7px; font-size: 14px; }
+      .bot { width: 27px; height: 27px; font-size: 14px; }
+      .assistant-greeting small { margin: 3px 0 0 34px; font-size: 11px; }
+      .guess-head { min-height: 46px; padding: 14px; font-size: 14px; }
+      .questions { gap: 8px; padding: 0 14px; }
+      .question { min-height: 43px; padding: 0 11px; font-size: 12px; }
+      .chat-box { height: 126px; margin: auto 14px 14px; padding: 12px; border-radius: 14px; }
+      .chat-input { min-height: 38px; font-size: 13px; }
+      .model-select { width: 112px; flex-basis: 112px; }
+      .model-select .ant-select-trigger { font-size: 11px; }
+      .send { width: 30px; height: 30px; font-size: 14px; }
+
+      .skeleton-nav { z-index: 2; }
+      .skeleton-brand { width: 42px; height: 25px; margin: 0 auto 20px; }
+      .skeleton-nav-line { width: 100%; height: 40px; margin-bottom: 5px; }
+      .skeleton-nav-line.short { display: none; }
+      .skeleton-board-title { margin-bottom: 11px; }
+      .skeleton-right .skeleton-card { padding: 14px; }
+      .skeleton-stat-number { height: 44px; margin-bottom: 10px; }
+      .skeleton-stat-grid > div { height: 106px; }
+      .skeleton-assistant-head { flex-basis: 68px; height: 68px; }
+      .skeleton-guess { flex-basis: 46px; height: 46px; margin: 0 14px; }
+      .skeleton-question-list { gap: 8px; padding: 0 14px; }
+      .skeleton-question { height: 43px; }
+      .skeleton-composer { flex-basis: 126px; height: 126px; margin: 14px; }
+
+      /* Configuration: preserve content density without desktop fixed widths. */
+      #config .thin-rail, #result .thin-rail { width: 72px; flex-basis: 72px; padding: 22px 15px; gap: 18px; }
+      #config .analysis-main { height: 100dvh; overflow-y: auto; }
+      #config .analysis-hero { width: min(780px, calc(100% - 48px)); padding-top: 94px; }
+      #config .back-link { top: 18px; left: 24px; }
+      #config .analysis-title { font-size: 28px; }
+      #config .analysis-subtitle { margin: 12px 0 38px; font-size: 19px; }
+      #config .prompt-shell { height: auto; min-height: 194px; padding: 14px 14px 54px; border-radius: 16px; font-size: 15px; line-height: 1.65; }
+      #config .prompt-line { height: auto; min-height: 31px; flex-wrap: wrap; gap: 4px 8px; white-space: normal; }
+      #config .prompt-lead-copy { flex: 0 0 100%; }
+      #config .ant-select.prompt-inline-select { width: 220px; flex-basis: 220px; }
+      #config .ant-select.prompt-inline-select.date-select { width: 260px; flex-basis: 260px; }
+      #config .prompt-tools { bottom: 12px; left: 14px; gap: 9px; }
+      #config .mode-pill { min-width: 143px; }
+      #config .custom-mode { min-width: 90px; }
+      #config .prompt-send { right: 14px; bottom: 12px; gap: 15px; }
+      #config .config-popover { width: min(595px, 100%); padding: 16px; }
+
+      /* Results: fluid split pane instead of a fixed 764px conversation column. */
+      #result .result-body { grid-template-columns: minmax(330px, 37vw) minmax(0, 1fr); }
+      #result .conversation { padding: 16px 14px 18px; }
+      #result .user-bubble { margin: 28px auto 18px; padding: 11px 13px; font-size: 14px; }
+      #result .ai-brief { margin: 14px 0 11px; font-size: 14px; line-height: 1.65; }
+      #result .thinking-card { padding: 12px; }
+      #result .thinking-status, #result .thinking-step { font-size: 12px; }
+      #result .report-ref { gap: 9px; padding: 10px; }
+      #result .report-ref b { font-size: 13px; }
+      #result .quick-actions { gap: 8px; }
+      #result .quick-actions button, #result .followup-actions button { min-height: 34px; padding: 0 10px; font-size: 12px; }
+      #result .followup-actions { gap: 8px; margin-top: 14px; }
+      #result .result-chat { flex-basis: 128px; height: 128px; padding: 12px; border-radius: 14px; }
+      #result .result-document { padding: 18px 22px 32px; }
+      #result .result-actions { gap: 12px; font-size: 13px; }
+      #result .result-report-stage, #result .doc-section { max-width: 100%; }
+      #result .result-title { margin: 34px 0 10px; font-size: 19px; }
+      #result .result-meta { gap: 7px 16px; font-size: 13px; }
+      #result .map-drop { min-height: 52px; margin-top: 13px; padding: 0 14px; }
+      #result .doc-tabs { margin-top: 16px; }
+      #result .doc-section h2 { font-size: 18px; }
+      #result .doc-section p, #result .pattern-card { font-size: 13px; }
+      #result .pattern-card { margin: 11px 0; padding: 12px 14px; line-height: 1.6; }
+      #result .composition-chart { grid-template-columns: 1fr; gap: 14px; margin: 18px 0 2px; padding: 16px; }
+      #result .chart-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #result .donut-visual { width: 154px; height: 154px; }
+      #result .trend-svg { height: 205px; }
+      #result .heat-grid { gap: 3px; grid-template-rows: repeat(8, 11px); }
+    }
+
+    @media (max-width: 780px) {
+      #home { zoom: 1; width: 100vw; height: 100dvh; }
+      #home .sidebar, .skeleton-nav { width: 64px; flex-basis: 64px; padding-left: 7px; padding-right: 7px; }
+      #home .home-content, .skeleton-home-content { grid-template-columns: minmax(0, 1fr) 336px; gap: 12px; padding: 12px 12px 12px 0; }
+      .map-search, .skeleton-search { left: 78px; top: 12px; width: min(300px, calc(100% - 90px)); }
+      .parking-detail { left: 78px; top: 72px; width: min(344px, calc(100% - 90px)); }
+      .application-board, .skeleton-board { left: 78px; right: 12px; bottom: 12px; }
+      .right-panel, .skeleton-right { grid-template-rows: 226px minmax(0, 1fr); gap: 12px; }
+      .metric-card { height: 226px; }
+      #config .analysis-hero { width: min(650px, calc(100% - 36px)); padding-top: 70px; }
+      #config .thin-rail, #result .thin-rail { width: 64px; flex-basis: 64px; padding-left: 11px; padding-right: 11px; }
+      #config .analysis-title { font-size: 25px; }
+      #config .analysis-subtitle { font-size: 17px; }
+      #config .ant-select.prompt-inline-select { width: 205px; flex-basis: 205px; }
+      #config .ant-select.prompt-inline-select.date-select { width: 245px; flex-basis: 245px; }
+      #result .result-body { grid-template-columns: minmax(286px, 38vw) minmax(0, 1fr); }
+      #result .conversation { padding: 14px 11px 15px; }
+      #result .result-document { padding: 16px; }
+      #result .result-actions { gap: 8px; }
+    }
+
+    /* Portrait tablets have enough physical space for the product, but not
+       for two narrow business columns.  Preserve the map-first workflow and
+       move data/AI content below it rather than shrinking either panel. */
+    @media (min-width: 600px) and (max-width: 899px) {
+      html, body { height: auto; overflow: auto; }
+      #home { height: auto; min-height: 100dvh; overflow: auto; }
+      #home .sidebar .brand { justify-content: center; padding: 0 0 20px; gap: 0; }
+      #home .sidebar .brand > span, #home .sidebar .collapse, #home .sidebar .nav-section { display: none; }
+      #home .sidebar .nav-item { justify-content: center; gap: 0; padding: 0; font-size: 0; }
+      #home .sidebar .nav-item .icon { width: 18px; height: 18px; }
+      #home .sidebar .profile { justify-content: center; padding: 12px 0 0; }
+      #home .sidebar .profile > span:not(.avatar) { display: none; }
+      #home .home-content, .skeleton-home-content { display: block; height: auto; min-height: 100dvh; padding: 0; }
+      #home .map-panel, .skeleton-map { height: 550px; }
+      #home .right-panel, .skeleton-right { width: calc(100% - 64px); margin-left: 64px; height: auto; min-height: 620px; grid-template-rows: 242px minmax(360px, 1fr); gap: 12px; padding: 12px; }
+      #home .metric-card { height: 242px; }
+      #home .assistant-card { min-height: 360px; }
+      #home .application-board, .skeleton-board { left: 78px; right: 12px; bottom: 12px; }
+      #home .map-search, .skeleton-search { left: 78px; width: min(390px, calc(100% - 94px)); }
+      #home .parking-detail { left: 78px; width: min(430px, calc(100% - 94px)); }
+
+      #config, #result { height: 100dvh; min-height: 0; overflow: hidden; }
+      #config .analysis-hero { padding-top: 64px; }
+      #config .prompt-shell { min-height: 214px; }
+      #config .prompt-line { height: auto; min-height: 31px; flex-wrap: wrap; gap: 4px 8px; white-space: normal; }
+      #config .prompt-lead-copy { flex: 0 0 100%; }
+      #config .config-popover { max-height: calc(100dvh - 360px); overflow: auto; }
+
+      #result .result-body { grid-template-columns: none; grid-template-rows: minmax(360px, 44dvh) minmax(0, 1fr); height: 100dvh; }
+      #result .conversation { height: auto; border-right: 0; border-bottom: 1px solid #e6e9ee; }
+      #result .result-document { height: auto; min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+  <section class="screen active" id="home" aria-label="首页">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg viewBox="0 0 36 25" fill="none" aria-hidden="true"><path d="M2 15h7l3-6h8l4 6h7M4 15l-2 4h6m22-4 3 4h-6M12 15h12M9 19a2 2 0 1 0 0 .01M27 19a2 2 0 1 0 0 .01" stroke="#2E9CFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>泊弈停车智能体</span>
+        <button class="icon-btn collapse" data-action="toast" data-message="已折叠菜单" aria-label="折叠菜单">▯</button>
+      </div>
+      <nav class="nav-list" aria-label="主导航">
+        <button class="nav-item" data-action="toast" data-message="已新建对话"><svg class="icon"><path d="M4 4h11v10H8l-4 4V4Z"/><path d="M11 1v6M8 4h6"/></svg>新对话</button>
+        <button class="nav-item active" data-action="toast" data-message="当前已在首页"><svg class="icon"><path d="m3 9 6-5 6 5v7H3V9Z"/><path d="M7 16v-4h4v4"/></svg>首页</button>
+        <button class="nav-item" data-action="toast" data-message="智能应用"><svg class="icon"><path d="m9 2 6 3v6l-6 3-6-3V5l6-3Z"/><path d="m6 7 3 2 3-2M9 9v5"/></svg>智能应用</button>
+        <button class="nav-item" data-action="toast" data-message="数据源管理"><svg class="icon"><rect x="2" y="3" width="14" height="13" rx="1"/><path d="M5 12V8m3 4V5m3 7v-2m3 2V6"/></svg>数据源管理</button>
+      </nav>
+      <div class="nav-section">知识管理</div>
+      <nav class="nav-list">
+        <button class="nav-item" data-action="toast" data-message="业务逻辑解释"><svg class="icon"><path d="M3 14h12M5 14V9h3V5h3v4h3v5"/><circle cx="8" cy="5" r="1"/><circle cx="5" cy="14" r="1"/><circle cx="13" cy="14" r="1"/></svg>业务逻辑解释</button>
+        <button class="nav-item" data-action="toast" data-message="同义词解释"><svg class="icon"><rect x="3" y="3" width="11" height="13" rx="1"/><path d="M6 7h5M6 10h5"/></svg>同义词解释</button>
+        <button class="nav-item" data-action="toast" data-message="SQL 模板"><svg class="icon"><path d="M3 3h12v12H3z"/><path d="M6 7h3M6 10h6"/></svg>SQL模板</button>
+      </nav>
+      <div class="nav-section">今日对话</div>
+      <nav class="nav-list">
+        <button class="nav-item" data-action="toast" data-message="打开：分析用户停车行为"><svg class="icon"><path d="M3 3h12v10H7l-4 3V3Z"/><path d="M6 7h6"/></svg>分析用户停车行为</button>
+        <button class="nav-item" data-action="toast" data-message="打开：智能匹配周边停车场"><svg class="icon"><path d="M3 3h12v10H7l-4 3V3Z"/><path d="M6 7h6"/></svg><span class="ellipsis">智能匹配周边停车场周边停...</span></button>
+      </nav>
+      <div class="nav-section">近期对话</div>
+      <nav class="nav-list">
+        <button class="nav-item" data-action="toast" data-message="打开近期对话"><svg class="icon"><path d="M3 3h12v10H7l-4 3V3Z"/><path d="M6 7h6"/></svg>分析用户停车行为</button>
+        <button class="nav-item" data-action="toast" data-message="打开近期对话"><svg class="icon"><path d="M3 3h12v10H7l-4 3V3Z"/><path d="M6 7h6"/></svg><span class="ellipsis">智能匹配周边停车场周边停...</span></button>
+      </nav>
+      <div class="profile"><span class="avatar">⌁</span><span>Jingyi.Wang</span><span class="chevron">›</span></div>
+    </aside>
+    <main class="home-content">
+      <section class="map-panel" aria-label="停车场地图">
+        <svg class="vector-map" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+          <rect width="1000" height="1000" fill="#fbfbf8"/>
+          <path d="M-50 74 210 59 438 116 752 108 1050 170M-40 231 220 193 507 234 1030 293M-55 557 184 582 405 521 680 572 1044 512M34 940 220 847 452 911 670 859 1040 912" stroke="#d7daf2" stroke-width="4" fill="none"/>
+          <path d="M72 0 97 240 153 343 212 491 201 713 254 1000M362 0 408 179 429 419 502 605 565 1000M752 0 690 197 723 333 699 589 768 795 758 1000M908 0 864 196 918 375 842 599 907 784 1020 1000" stroke="#d7daf2" stroke-width="4" fill="none"/>
+          <path d="M0 0h133l-30 91-100 38Zm550 26 133 4 39 86-94 20Zm119 314 122-42 65 93-84 67Zm-512 75 107-12 43 119-93 42ZM428 681l144-44 93 111-190 46Zm286 165 145-57 99 96-124 115Z" fill="#e5f1c3"/>
+          <path d="M1000 395c-83 47-119 144-87 209 27 55 45 86 86 173v-382Zm-69 606 69-156V1000Z" fill="#73d6ef"/>
+          <path d="M-51 599C96 568 217 607 320 621c171 25 220-69 374-32 133 32 209 105 356 65" stroke="#a6abdf" stroke-width="18" fill="none"/>
+          <path d="M332-30c44 180 27 318 70 428 28 73 80 114 94 193 18 105-50 189-29 438" stroke="#a6abdf" stroke-width="16" fill="none"/>
+          <path d="M1055 215C891 266 781 319 703 398c-95 95-84 202-205 237-132 39-208 0-303 31-78 25-133 73-236 115" stroke="#a6abdf" stroke-width="18" fill="none"/>
+          <path d="M866 1005C795 871 749 766 724 667c-21-83-41-161-128-230-60-48-158-55-231-81" stroke="#a6abdf" stroke-width="18" fill="none"/>
+          <path d="M-10 770c87-17 139-4 210 51 55 42 84 117 102 201M240 549c-54-54-72-128-54-207M650 220c37-35 82-45 134-45M497 550c60-25 92-46 124-99" stroke="#b5b8ee" stroke-width="8" fill="none"/>
+          <path d="M-31 887 187 796 290 734M442 408l75-17 74 33M646 462l54 41 44 6M738 676l46 34 37-10M688 869l56-16 38 27" stroke="#e8e9f7" stroke-width="3" fill="none"/>
+          <path d="M420 0c48 104 92 165 144 214 49 47 89 108 136 172" stroke="#5fcde6" stroke-width="3" fill="none"/>
+        </svg>
+        <div class="map-search" id="mapSearch">
+          <div class="map-search-row">
+            <input id="parkingSearch" value="桂湾河公园停车场" aria-label="搜索停车场" autocomplete="off">
+            <button class="icon-btn" data-action="search" aria-label="搜索"><svg class="icon"><circle cx="8" cy="8" r="5"/><path d="m12 12 4 4"/></svg></button>
+            <button class="icon-btn" data-action="clear-search" aria-label="清空搜索"><svg class="icon"><path d="M4 5h8m-7 0 1 11h4l1-11M7 5V3h2v2M7 8v5m2-5v5"/></svg></button>
+          </div>
+          <div class="search-popover" aria-label="搜索建议">
+            <button class="suggestion" data-action="select-parking" data-parking="桂湾河公园停车场"><svg class="icon small-icon"><circle cx="7" cy="7" r="4"/><path d="m10 10 4 4"/></svg><span class="suggestion-text">桂湾河公园停车场</span></button>
+            <button class="suggestion selected" data-action="select-parking" data-parking="前海梦工场二期停车场"><svg class="icon small-icon"><circle cx="7" cy="7" r="4"/><path d="m10 10 4 4"/></svg><span class="suggestion-text">前海梦工场二期停车场</span></button>
+            <button class="suggestion" data-action="select-parking" data-parking="前海石公园停车场"><svg class="icon small-icon"><circle cx="7" cy="7" r="4"/><path d="m10 10 4 4"/></svg><span class="suggestion-text">前海石公园公共停车场</span></button>
+            <button class="suggestion" data-action="select-parking" data-parking="前海运动公园停车场"><svg class="icon small-icon"><circle cx="7" cy="7" r="4"/><path d="m10 10 4 4"/></svg><span class="suggestion-text">前海运动公园停车场</span></button>
+          </div>
+        </div>
+        <section id="parkingDetail" class="parking-detail" hidden aria-live="polite">
+          <h2 id="detailName" class="detail-name">桂湾河公园停车场</h2>
+          <dl class="detail-list">
+            <div class="detail-row"><dt>详细地址：</dt><dd id="detailAddress">桂湾河南街与鲤鱼门二街交叉口西北处</dd></div>
+            <div class="detail-row"><dt>车位数量：</dt><dd id="detailCapacity">2000个</dd></div>
+            <div class="detail-row"><dt>车位利用率：</dt><dd id="detailUsage">工作日55%；非工作日65%</dd></div>
+          </dl>
+          <div class="fee-title">收费情况</div>
+          <div class="fee-tabs" role="tablist" aria-label="收费类型">
+            <button class="active" data-action="detail-tab" data-fee="区域卡">区域卡</button>
+            <button data-action="detail-tab" data-fee="小时卡">小时卡</button>
+            <button data-action="detail-tab" data-fee="普通月卡">普通月卡</button>
+          </div>
+          <p id="feeCopy" class="fee-copy"><span>1、工作日和非工作日均首小时10元，第二小时起5元/小时；</span><span>2、封顶60元/1天</span></p>
+        </section>
+        <button class="map-label label-a" data-action="select-parking" data-parking="前海运动公园停车场"><span class="parking">P</span>前海运动公园停车场</button>
+        <button class="map-label label-b" data-action="select-parking" data-parking="前海运动公园停车场"><span class="parking">P</span>前海运动公园停车场</button>
+        <button class="map-label label-c" data-action="select-parking" data-parking="桂湾河公园停车场"><span class="parking">P</span>桂湾河公园停车场</button>
+        <button class="map-label label-d" data-action="select-parking" data-parking="前海石公园停车场"><span class="parking">P</span>前海石公园停车场</button>
+        <section class="application-board">
+          <div class="board-head">智能应用 <button class="expand-btn" data-action="toast" data-message="智能应用已展开">⌃ 展开</button></div>
+          <div class="app-cards">
+            <button class="app-card" data-action="toast" data-message="已打开智能停车问数"><span class="app-card-title"><span class="card-icon blue-bg">▰</span>智能停车问数 ›</span><small>停车场运营情况快速获取</small></button>
+            <button class="app-card" data-action="open-analysis"><span class="app-card-title"><span class="card-icon purple-bg">⌁</span>停车模式分析 ›</span><small>各类型用户停车行为画像</small></button>
+            <button class="app-card" data-action="toast" data-message="已打开月卡超售策略"><span class="app-card-title"><span class="card-icon orange-bg">▣</span>月卡超售策略 ›</span><small>平衡停车收益与用户体验</small></button>
+            <button class="app-card" data-action="toast" data-message="已打开智能定价策略"><span class="app-card-title"><span class="card-icon green-bg">⌾</span>智能定价策略 ›</span><small>多种定价方案与效果推演</small></button>
+            <button class="app-card" data-action="toast" data-message="已打开密集停车策略"><span class="app-card-title"><span class="card-icon red-bg">▦</span>密集停车策略 ›</span><small>空间优化提升车位利用率</small></button>
+          </div>
+        </section>
+      </section>
+      <aside class="right-panel">
+        <section class="metric-card">
+          <div class="date-row">数据更新时间：2025-12-12 22:06 <button class="refresh" data-action="refresh-home">⟳ 刷新</button></div>
+          <div class="volume"><span>总车流量</span><div class="digit-wrap" aria-label="总车流量 201411"><span class="digit">2</span><span class="digit">0</span><span class="digit">1</span><span class="digit">4</span><span class="digit">1</span><span class="digit">1</span></div><b>&nbsp;次</b></div>
+          <div class="metric-grid">
+            <button class="metric" data-action="toast" data-message="查看车位占用率详情"><span class="metric-title">车位占用率 ⓘ <span>本月日均</span></span><span class="metric-value">75.5<b>%</b></span><span class="metric-delta minus">−0.5% <i>较上月</i></span></button>
+            <button class="metric" data-action="toast" data-message="查看车位周转率详情"><span class="metric-title">车位周转率 ⓘ <span>本月日均</span></span><span class="metric-value">155.0<b>%</b></span><span class="metric-delta plus">+0.5% <i>较上月</i></span></button>
+          </div>
+        </section>
+        <section class="assistant-card">
+          <div class="assistant-greeting"><div class="greeting-title"><span class="bot">●</span>Hi~ 我是小泊,很高兴为您服务！</div><small>我们提供一站式停车场运营管理解决方案，帮助您高效管理停车场~</small></div>
+          <div class="guess-head">猜你想问 <button data-action="toast" data-message="已换一批推荐问题">⟳ 换一批</button></div>
+          <div class="questions">
+            <button class="question" data-action="ask" data-message="桂湾公园停车场2025年的收入情况">桂湾公园停车场2025年的收入情况 <b>→</b></button>
+            <button class="question" data-action="ask" data-message="19单元地下停车场2025年5月停车模式分析">19单元地下停车场2025年5月停车模式分析 <b>→</b></button>
+            <button class="question" data-action="ask" data-message="妈湾货运停车场密集停车策略">妈湾货运停车场密集停车策略 <b>→</b></button>
+            <button class="question" data-action="ask" data-message="19单元地下停车场2025年6月月卡超售策略">19单元地下停车场2025年6月月卡超售策略 <b>→</b></button>
+            <button class="question" data-action="ask" data-message="前海运动公园停车场错峰共享策略">前海运动公园停车场错峰共享策略 <b>→</b></button>
+            <button class="question" data-action="ask" data-message="鲤鱼门西街公共停车场充电桩车位分配策略">鲤鱼门西街公共停车场充电桩车位分配策略 <b>→</b></button>
+          </div>
+          <div class="chat-box">
+            <textarea id="homeChat" class="chat-input" aria-label="向小泊提问" placeholder="✦ 问一问小泊"></textarea>
+            <div class="chat-foot"><div class="ant-select model-select" data-select="home-model"><button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="模型选择" aria-expanded="false" aria-controls="homeModelOptions"><span class="ant-select-value">Qwen-Max</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="ant-select-dropdown" id="homeModelOptions" role="listbox" hidden><button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="Qwen-Max">Qwen-Max</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="Qwen-Plus">Qwen-Plus</button></div></div><button class="plain-btn paperclip" data-action="toast" data-message="请选择附件">♧</button><button class="send" data-action="send-chat" data-input="homeChat">➤</button></div>
+          </div>
+        </section>
+      </aside>
+    </main>
+    <section id="homeLoading" class="home-loading active" aria-label="首页加载中" aria-busy="true">
+      <div class="skeleton-home-content">
+        <div class="skeleton-map">
+          <div class="skeleton-shimmer skeleton-search"></div>
+          <div class="skeleton-map-road one"></div>
+          <div class="skeleton-map-road two"></div>
+          <div class="skeleton-map-road three"></div>
+          <div class="skeleton-board">
+            <div class="skeleton-shimmer skeleton-board-title"></div>
+            <div class="skeleton-board-grid">
+              <div class="skeleton-shimmer skeleton-board-item"></div><div class="skeleton-shimmer skeleton-board-item"></div><div class="skeleton-shimmer skeleton-board-item"></div><div class="skeleton-shimmer skeleton-board-item"></div><div class="skeleton-shimmer skeleton-board-item"></div>
+            </div>
+          </div>
+        </div>
+        <div class="skeleton-right">
+          <div class="skeleton-card">
+            <div class="skeleton-shimmer skeleton-stat-top"></div>
+            <div class="skeleton-shimmer skeleton-stat-number"></div>
+            <div class="skeleton-stat-grid"><div class="skeleton-shimmer"></div><div class="skeleton-shimmer"></div></div>
+          </div>
+          <div class="skeleton-card skeleton-assistant-card">
+            <div class="skeleton-shimmer skeleton-assistant-head"></div>
+            <div class="skeleton-shimmer skeleton-guess"></div>
+            <div class="skeleton-question-list"><div class="skeleton-shimmer skeleton-question"></div><div class="skeleton-shimmer skeleton-question"></div><div class="skeleton-shimmer skeleton-question"></div><div class="skeleton-shimmer skeleton-question"></div></div>
+            <div class="skeleton-shimmer skeleton-composer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="skeleton-nav">
+        <div class="skeleton-shimmer skeleton-brand"></div>
+        <div class="skeleton-shimmer skeleton-nav-line"></div>
+        <div class="skeleton-shimmer skeleton-nav-line"></div>
+        <div class="skeleton-shimmer skeleton-nav-line"></div>
+        <div class="skeleton-shimmer skeleton-nav-line short"></div>
+        <div class="skeleton-shimmer skeleton-nav-line"></div>
+        <div class="skeleton-shimmer skeleton-nav-line"></div>
+      </div>
+    </section>
+  </section>
+
+  <section class="screen" id="config" aria-label="停车模式分析配置">
+    <aside class="thin-rail" aria-label="快捷导航">
+      <button class="rail-button" data-action="back-home" aria-label="展开导航">▯</button>
+      <button class="rail-button active" data-action="toast" data-message="新对话"><svg class="icon"><path d="M4 4h11v10H8l-4 4V4Z"/><path d="M11 1v6M8 4h6"/></svg></button>
+      <button class="rail-button" data-action="back-home" aria-label="首页"><svg class="icon"><path d="m3 9 6-5 6 5v7H3V9Z"/></svg></button>
+      <button class="rail-button" data-action="toast" data-message="智能应用"><svg class="icon"><path d="m9 2 6 3v6l-6 3-6-3V5l6-3Z"/></svg></button>
+      <button class="rail-button" data-action="toast" data-message="数据源管理"><svg class="icon"><rect x="2" y="3" width="14" height="13"/><path d="M5 12V8m3 4V5m3 7v-2"/></svg></button>
+      <span class="rail-user">◒</span>
+    </aside>
+    <main class="analysis-main">
+      <button class="back-link" data-action="back-home">‹ 返回首页</button>
+      <section class="analysis-hero">
+        <h1 class="analysis-title"><span class="title-icon">⌁</span>停车模式分析</h1>
+        <p class="analysis-subtitle">基于停车记录分析用户停车行为的规律</p>
+        <div class="prompt-shell">
+          <div class="prompt-copy">
+            <div class="prompt-line prompt-line--lead"><span>现有</span>
+          <div class="ant-select prompt-inline-select" data-select="parking-record">
+            <button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="选择停车场" aria-expanded="false" aria-controls="parkingRecordOptions"><span class="ant-select-value">南方医科大学深圳医院停车场</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="ant-select-dropdown" id="parkingRecordOptions" role="listbox" hidden>
+              <button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="南方医科大学深圳医院停车场">南方医科大学深圳医院停车场</button>
+              <button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="桂湾河公园停车场">桂湾河公园停车场</button>
+              <button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="19单元地下停车场">19单元地下停车场</button>
+            </div>
+          </div>
+          <div class="ant-select prompt-inline-select date-select" data-select="analysis-date">
+            <button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="选择分析日期" aria-expanded="false" aria-controls="analysisDateOptions"><span class="ant-select-value">2026-01-20　→　2026-02-20</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="ant-select-dropdown" id="analysisDateOptions" role="listbox" hidden>
+              <button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="2026-01-20　→　2026-02-20">2026-01-20　→　2026-02-20</button>
+              <button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="2025-05-01　→　2025-05-31">2025-05-01　→　2025-05-31</button>
+            </div>
+          </div>
+            <span class="prompt-lead-copy">的月卡停车记录，你作为经验丰富的运营专家，</span></div>
+            <div class="prompt-line">初步掌握到该停车场存在8类停车特征，接下来需要对这8类特征的停车模式进行分析。</div>
+          </div>
+          <div class="prompt-tools"><button class="mode-pill" data-action="toast" data-message="已切换至专家模式">普通 <b>◈ 专家</b></button><button id="customMode" class="mode-pill custom-mode" type="button" data-action="toggle-config" aria-expanded="false" aria-controls="configPopover">☷ 自定义</button></div>
+          <div class="prompt-send"><button class="plain-btn" data-action="toast" data-message="请选择附件">♧</button><button class="send-circle" data-action="send-analysis" aria-label="发送并开始分析">➤</button></div>
+        </div>
+        <section class="config-popover" id="configPopover" hidden>
+          <h2>分析参数配置</h2>
+          <div class="range-box">
+            <label class="field-label" for="volatility">波动适配范围 ⓘ</label>
+            <div class="range-line"><input id="volatility" type="range" min="0" max="1" step="0.1" value="0.3"><button class="step-btn" data-action="range-minus" aria-label="降低波动范围">−</button><output class="range-number" id="rangeValue">0.3</output><button class="step-btn" data-action="range-plus" aria-label="增加波动范围">+</button></div>
+            <div class="range-legend"><span>0：低波动</span><span>1：高波动</span></div>
+          </div>
+          <div class="select-grid">
+            <label><span class="field-label">算法类型</span><span class="ant-select" data-select="algorithm"><button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="算法类型" aria-expanded="false" aria-controls="algorithmOptions"><span class="ant-select-value">请选择</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="ant-select-dropdown" id="algorithmOptions" role="listbox" hidden><button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="请选择">请选择</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="K-Means 聚类">K-Means 聚类</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="DBSCAN">DBSCAN</button></span></span></label>
+            <label><span class="field-label">分析类型 ⓘ</span><span class="ant-select" data-select="analysis-type"><button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="分析类型" aria-expanded="false" aria-controls="analysisTypeOptions"><span class="ant-select-value">请选择</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="ant-select-dropdown" id="analysisTypeOptions" role="listbox" hidden><button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="请选择">请选择</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="用户分群">用户分群</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="时段模式">时段模式</button></span></span></label>
+            <label><span class="field-label">时间特征 ⓘ</span><span class="ant-select" data-select="time-feature"><button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="时间特征" aria-expanded="false" aria-controls="timeFeatureOptions"><span class="ant-select-value">请选择</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="ant-select-dropdown" id="timeFeatureOptions" role="listbox" hidden><button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="请选择">请选择</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="工作日">工作日</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="周末">周末</button></span></span></label>
+            <label><span class="field-label">模式特征 ⓘ</span><span class="ant-select" data-select="pattern-feature"><button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="模式特征" aria-expanded="false" aria-controls="patternFeatureOptions"><span class="ant-select-value">请选择</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="ant-select-dropdown" id="patternFeatureOptions" role="listbox" hidden><button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="请选择">请选择</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="停车时长">停车时长</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="入场时段">入场时段</button></span></span></label>
+          </div>
+          <div class="switch-row"><div class="switch-copy"><span>开启模式归纳</span><small>说明：开启后，可将分析结果中特征相似的模式组合为同一类型</small></div><input class="switch" type="checkbox" checked aria-label="开启模式归纳"></div>
+          <div class="switch-row"><div class="switch-copy"><span>预设模式类型</span><small>说明：开启后，可为智能体预设停车模式的类型及特征</small></div><input class="switch" type="checkbox" aria-label="预设模式类型"></div>
+        </section>
+      </section>
+    </main>
+  </section>
+
+  <section class="screen" id="result" aria-label="停车模式分析结果">
+    <aside class="thin-rail" aria-label="快捷导航">
+      <button class="rail-button" data-action="back-home" aria-label="展开导航">▯</button>
+      <button class="rail-button active" data-action="toast" data-message="新对话"><svg class="icon"><path d="M4 4h11v10H8l-4 4V4Z"/></svg></button>
+      <button class="rail-button" data-action="back-home" aria-label="首页"><svg class="icon"><path d="m3 9 6-5 6 5v7H3V9Z"/></svg></button>
+      <button class="rail-button" data-action="toast" data-message="智能应用"><svg class="icon"><path d="m9 2 6 3v6l-6 3-6-3V5l6-3Z"/></svg></button>
+      <button class="rail-button" data-action="toast" data-message="数据源管理"><svg class="icon"><rect x="2" y="3" width="14" height="13"/><path d="M5 12V8m3 4V5m3 7v-2"/></svg></button>
+      <span class="rail-user">◒</span>
+    </aside>
+    <div class="result-body">
+      <aside class="conversation">
+        <button class="history-link" data-action="toast" data-message="历史记录已打开">▧ 历史记录</button>
+        <div class="conversation-feed" id="conversationFeed">
+          <div class="user-bubble" id="resultQuestion">19单元地下停车场2025年5月停车模式分析</div>
+          <button class="analysis-done" data-action="toast" data-message="需求分析已展开">已完成需求分析　›</button>
+          <p class="ai-brief">我将从 19 单元地下停车场 2025 年 5 月的模式组成、模式特征等维度进行分析并总结。</p>
+          <section class="thinking-card" id="thinkingCard" aria-live="polite" aria-label="智能体深度思考进度">
+            <div class="thinking-head"><span class="thinking-orb" aria-hidden="true"></span><span id="thinkingTitle">正在深度思考</span><span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <p class="thinking-status" id="thinkingStatus">正在读取停车记录并建立分析维度…</p>
+            <div class="thinking-steps" aria-hidden="true">
+              <div class="thinking-step active" id="thinkingStep1">归集月卡、入场与停留时段数据</div>
+              <div class="thinking-step" id="thinkingStep2">识别高峰、时长与到访频率特征</div>
+              <div class="thinking-step" id="thinkingStep3">生成可执行的运营结论</div>
+            </div>
+          </section>
+          <div class="ai-stream" id="aiStream" aria-live="polite"></div>
+          <button class="report-ref" data-action="toast" data-message="分析报告已生成"><span class="thumb"></span><span><b>19单元03街坊地下停车场2025年6月停车模式分析</b><small>创建时间：01-15 17:16</small></span></button>
+          <div class="chat-buttons">
+            <div class="quick-actions">
+              <button data-action="toast" data-message="正在生成月卡容量测算">▥ 月卡容量测算</button>
+              <button data-action="reconfigure">☷ 重新配置</button>
+              <button data-action="toast" data-message="已复制分析结论">▣</button>
+              <button data-action="rerun-result">⟳ 重新生成</button>
+            </div>
+            <div class="followup-actions">
+              <button data-action="result-followup" data-question="请调整智能体分析激进程度">调整智能体分析激进程度　→</button>
+              <button data-action="result-followup" data-question="请预测该停车场未来30天停车流量">停车流量预测　→</button>
+              <button data-action="result-followup" data-question="请基于停车模式结果进行月卡超售回测">基于停车模式结果进行月卡超售回测　→</button>
+            </div>
+          </div>
+        </div>
+        <div class="result-chat"><textarea id="resultChat" class="chat-input" aria-label="向智小园提问" placeholder="✦ 问一问智小园"></textarea><div class="chat-foot"><div class="ant-select model-select" data-select="result-model"><button class="ant-select-trigger" type="button" data-action="toggle-select" aria-label="模型选择" aria-expanded="false" aria-controls="resultModelOptions"><span class="ant-select-value">Qwen-Max</span><svg class="ant-select-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.25 5.75 4.75 4.5 4.75-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="ant-select-dropdown" id="resultModelOptions" role="listbox" hidden><button class="ant-select-option selected" type="button" role="option" aria-selected="true" data-action="select-option" data-value="Qwen-Max">Qwen-Max</button><button class="ant-select-option" type="button" role="option" aria-selected="false" data-action="select-option" data-value="Qwen-Plus">Qwen-Plus</button></div></div><button class="plain-btn paperclip" data-action="toast" data-message="请选择附件">♧</button><button class="send" data-action="send-chat" data-input="resultChat">➤</button></div></div>
+      </aside>
+      <main class="result-document" id="resultDocument">
+        <div class="result-actions"><button data-action="toast" data-message="案例已保存">▣ 保存案例</button><button data-action="toast" data-message="报告下载已开始">⇩ 下载</button><span style="color:#dfe2e6">│</span><button data-action="back-home" aria-label="关闭结果">×</button></div>
+        <div class="result-report-stage" id="resultReportStage">
+          <div class="report-generating" id="reportGenerating" role="status" aria-live="polite"><div><span class="report-spinner" aria-hidden="true"></span><b>正在组织分析报告</b><small>模型将聚类结果转化为可执行洞察</small></div></div>
+          <article class="report-content" id="reportContent" aria-label="停车模式分析报告">
+            <h1 class="result-title">19单元03街坊地下停车场2025年6月停车模式分析</h1>
+            <div class="result-meta"><span>月卡用户：260</span><span>模式类型：8</span><span>特征：工作日通勤</span></div>
+            <button class="map-drop" id="resultMapToggle" data-action="toggle-result-map" aria-expanded="false" aria-controls="resultMapPanel"><span>♧</span> 查看地图 <b>⌄</b></button>
+            <div class="report-map-panel" id="resultMapPanel" hidden>
+              <svg class="mini-map" viewBox="0 0 760 220" preserveAspectRatio="none" aria-label="19单元03街坊地下停车场周边地图" role="img">
+                <rect width="760" height="220" fill="#fcfcf8"/>
+                <path class="park" d="M45 24l116 5 20 38-93 27-54-22zM486 22l86 10 8 34-69 17-39-26zM605 118l82-19 38 37-72 46-48-23zM255 161l89-25 44 47-91 23z"/>
+                <path class="minor" d="M8 31L191 92 337 55 515 113 744 61M19 84l180 17 113 55 168-8 239 39M66 10l27 189M210 9l17 198M366 3l-8 213M522 2l36 214M681 11l-45 201M96 148l119-47 115 72 140-36 138 53M330 20l-73 98 98 80M580 42l-105 83 97 76"/>
+                <path class="major" d="M-10 121C129 101 221 109 319 128S490 155 594 116 714 67 778 71M138 -16C150 44 161 89 167 129s-7 70-1 109M-18 183C114 169 210 198 316 181s164-55 238-24 139 50 224 34"/>
+                <path class="river" d="M760 146c-42-13-65 3-76 28s6 35 48 48M703 220c-13-42-10-73 8-103"/>
+                <g class="map-marker" role="button" tabindex="0" data-action="mini-map-marker" data-message="已定位：19单元03街坊地下停车场"><circle cx="420" cy="135" r="13"/><text x="420" y="135">P</text></g>
+                <g class="map-marker" role="button" tabindex="0" data-action="mini-map-marker" data-message="已定位：前海运动公园停车场"><circle cx="606" cy="100" r="11"/><text x="606" y="100">P</text></g>
+              </svg>
+              <span class="mini-map-caption">点击停车标记查看定位</span>
+            </div>
+            <div class="doc-tabs" role="tablist" aria-label="报告章节导航"><div class="doc-tabs-inner"><button class="active" data-action="result-tab" data-target="reportComposition" role="tab" aria-selected="true">模式组成</button><button data-action="result-tab" data-target="reportFeature" role="tab" aria-selected="false">模式特征</button><button data-action="result-tab" data-target="reportConclusion" role="tab" aria-selected="false">分析结论</button></div></div>
+            <section class="doc-section" id="reportComposition">
+              <h2>一、模式组成</h2>
+              <p>19单元03街坊地下停车场有8种停车模式，具体每种停车模式的特征如下：</p>
+              <div class="pattern-card"><b>模式1：典型工作日通勤特征</b><br>用户数量为 <span>25辆</span>，停车时段聚集在 <span>07:30-19:30</span>，显示典型工作日通勤特征。</div>
+              <div class="pattern-card"><b>模式2：晚高峰停车特征</b><br>用户数量为 <span>25辆</span>，停车时段聚集在 <span>17:30-22:00</span>，显示晚高峰集中入场特征。</div>
+              <div class="pattern-card"><b>模式3：全天长周期停车特征</b><br>用户数量为 <span>25辆</span>，停车时段覆盖 <span>08:00-21:30</span>，显示长时稳定停车特征。</div>
+              <div class="pattern-card"><b>模式4：早高峰停车特征</b><br>用户数量为 <span>25辆</span>，停车时段聚集在 <span>06:30-12:00</span>，显示早间入场需求。</div>
+              <div class="pattern-card"><b>模式5：午间短时停车特征</b><br>用户数量为 <span>25辆</span>，停车时段聚集在 <span>11:30-14:00</span>，显示短时周转需求。</div>
+              <div class="pattern-card"><b>模式6：偶发性停车特征</b><br>用户数量为 <span>25辆</span>，到访频率较低，停车时段呈随机分布。</div>
+              <div class="pattern-card"><b>模式7：不规则停车特征</b><br>用户数量为 <span>25辆</span>，停留时长差异较大，需结合临停策略引导。</div>
+              <div class="pattern-card"><b>模式8：晚高峰停车特征</b><br>用户数量为 <span>25辆</span>，停车时段聚集在 <span>22:00-24:00</span>，显示夜间停车需求。</div>
+              <p style="margin-top:25px">各模式车辆数占比如下：</p>
+              <div class="composition-chart" aria-label="停车模式车辆数占比图">
+                <button class="donut-visual" id="donutVisual" data-action="cycle-pattern" aria-label="点击切换停车模式占比详情"><span class="donut-hole"><b id="donutValue">26%</b><small id="donutLabel">模式1</small></span></button>
+                <div class="chart-legend" id="patternLegend">
+                  <button class="active" data-action="select-pattern" data-pattern="0"><i class="legend-dot" style="--legend-color:#ffd21f"></i><span class="legend-name">模式1</span><span>26%</span></button>
+                  <button data-action="select-pattern" data-pattern="1"><i class="legend-dot" style="--legend-color:#fb7879"></i><span class="legend-name">模式2</span><span>25%</span></button>
+                  <button data-action="select-pattern" data-pattern="2"><i class="legend-dot" style="--legend-color:#76cfe2"></i><span class="legend-name">模式3</span><span>15%</span></button>
+                  <button data-action="select-pattern" data-pattern="3"><i class="legend-dot" style="--legend-color:#81a9ee"></i><span class="legend-name">模式4</span><span>11%</span></button>
+                  <button data-action="select-pattern" data-pattern="4"><i class="legend-dot" style="--legend-color:#8662df"></i><span class="legend-name">模式5</span><span>7%</span></button>
+                  <button data-action="select-pattern" data-pattern="5"><i class="legend-dot" style="--legend-color:#54bd3d"></i><span class="legend-name">模式6</span><span>6%</span></button>
+                  <button data-action="select-pattern" data-pattern="6"><i class="legend-dot" style="--legend-color:#4bc49f"></i><span class="legend-name">模式7</span><span>6%</span></button>
+                  <button data-action="select-pattern" data-pattern="7"><i class="legend-dot" style="--legend-color:#ffaf1b"></i><span class="legend-name">模式8</span><span>4%</span></button>
+                </div>
+              </div>
+            </section>
+            <section class="doc-section" id="reportFeature">
+              <h2>二、模式特征</h2>
+              <p>各模式数量分布图如下；点击曲线节点或热力单元格可查看相应时段的模式特征。</p>
+              <div class="trend-card" aria-label="停车模式数量时序图">
+                <svg class="trend-svg" viewBox="0 0 700 250" role="img" aria-label="0点至24点停车模式数量变化曲线">
+                  <defs><linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9fc9ff" stop-opacity=".65"/><stop offset="1" stop-color="#eaf4ff" stop-opacity=".1"/></linearGradient></defs>
+                  <path class="grid" d="M58 45H662M58 91H662M58 137H662M58 183H662"/>
+                  <text class="axis-label" x="15" y="48">15</text><text class="axis-label" x="15" y="94">10</text><text class="axis-label" x="21" y="140">5</text><text class="axis-label" x="21" y="186">0</text>
+                  <path class="area" d="M58 174 L105 174 L132 170 L156 145 L181 155 L205 126 L231 138 L254 108 L281 99 L306 69 L331 43 L357 55 L381 100 L406 111 L431 84 L456 89 L482 94 L529 94 L577 94 L625 94 L662 94 L662 183 L58 183 Z"/>
+                  <path class="line" d="M58 174 L105 174 L132 170 L156 145 L181 155 L205 126 L231 138 L254 108 L281 99 L306 69 L331 43 L357 55 L381 100 L406 111 L431 84 L456 89 L482 94 L529 94 L577 94 L625 94 L662 94"/>
+                  <circle class="trend-point" cx="156" cy="145" r="4" data-action="trend-point" data-time="06:00" data-count="5" role="button" tabindex="0" aria-label="06:00，模式数量5"/>
+                  <circle class="trend-point" cx="254" cy="108" r="4" data-action="trend-point" data-time="10:00" data-count="8" role="button" tabindex="0" aria-label="10:00，模式数量8"/>
+                  <circle class="trend-point active" cx="331" cy="43" r="5" data-action="trend-point" data-time="12:10" data-count="12" role="button" tabindex="0" aria-label="12:10，模式数量12"/>
+                  <circle class="trend-point" cx="431" cy="84" r="4" data-action="trend-point" data-time="16:00" data-count="10" role="button" tabindex="0" aria-label="16:00，模式数量10"/>
+                  <text class="axis-label" x="53" y="218">0:00</text><text class="axis-label" x="200" y="218">6:00</text><text class="axis-label" x="348" y="218">12:00</text><text class="axis-label" x="500" y="218">18:00</text><text class="axis-label" x="642" y="218">24:00</text>
+                </svg>
+                <div class="chart-tooltip" id="trendTooltip"><b>时间：12:10</b><br>模式数量：12</div>
+              </div>
+              <div class="heatmap-card" aria-label="停车模式时段热力图">
+                <p class="heatmap-title">模式占用热力图（每格代表一个15分钟时段）</p>
+                <div class="heatmap-layout"><div class="heatmap-rows" aria-hidden="true"><span>模式8</span><span>模式7</span><span>模式6</span><span>模式5</span><span>模式4</span><span>模式3</span><span>模式2</span><span>模式1</span></div><div class="heat-grid" id="heatGrid" role="grid" aria-label="停车模式热力单元格"></div></div>
+                <div class="heat-times"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+                <div class="heat-legend"><span><i></i>低</span><span><i class="mid"></i>适中</span><span><i class="high"></i>高</span></div>
+                <div class="heat-tooltip" id="heatTooltip">选择热力格查看模式与时间片说明。</div>
+              </div>
+              <p><b>▤ 解读：</b><br>热力图横轴为时间切片（每15分钟为一个切片），纵轴为停车模式编号。颜色深度表示停车占用强度；模式3在白天时段持续高占用，模式7集中在午间短时需求。</p>
+            </section>
+            <section class="doc-section" id="reportConclusion">
+              <h2>三、分析总结</h2>
+              <ul class="conclusion-list"><li>月卡用户主要集中在工作日白天时段（模式3和模式1），建议保留稳定月卡供给并设置错峰权益。</li><li>全天候停车需求（模式2）覆盖约5辆，适合固定停车场景，可作为长期客户分层运营对象。</li><li>短时停车（模式7）用户虽少，但在午间形成明显聚集，建议通过临停引导提升周转效率。</li><li>夜间停车需求（模式8）集中在22:00–24:00，可提供夜间月卡或低谷价格方案。</li></ul>
+            </section>
+          </article>
+        </div>
+      </main>
+    </div>
+    <span class="doc-scroll" aria-hidden="true"></span>
+  </section>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    (function () {
+      var toast = document.getElementById('toast');
+      var toastTimer;
+      var screenIds = ['home', 'config', 'result'];
+      var input = document.getElementById('parkingSearch');
+      var mapSearch = document.getElementById('mapSearch');
+      var range = document.getElementById('volatility');
+      var rangeValue = document.getElementById('rangeValue');
+      var homeLoading = document.getElementById('homeLoading');
+      var loadingTimer;
+      var parkingDetail = document.getElementById('parkingDetail');
+      var detailName = document.getElementById('detailName');
+      var detailAddress = document.getElementById('detailAddress');
+      var detailCapacity = document.getElementById('detailCapacity');
+      var detailUsage = document.getElementById('detailUsage');
+      var feeCopy = document.getElementById('feeCopy');
+      var configPopover = document.getElementById('configPopover');
+      var customMode = document.getElementById('customMode');
+      var resultScreen = document.getElementById('result');
+      var resultDocument = document.getElementById('resultDocument');
+      var resultQuestion = document.getElementById('resultQuestion');
+      var conversationFeed = document.getElementById('conversationFeed');
+      var thinkingTitle = document.getElementById('thinkingTitle');
+      var thinkingStatus = document.getElementById('thinkingStatus');
+      var thinkingSteps = [document.getElementById('thinkingStep1'), document.getElementById('thinkingStep2'), document.getElementById('thinkingStep3')];
+      var aiStream = document.getElementById('aiStream');
+      var resultMapToggle = document.getElementById('resultMapToggle');
+      var resultMapPanel = document.getElementById('resultMapPanel');
+      var donutValue = document.getElementById('donutValue');
+      var donutLabel = document.getElementById('donutLabel');
+      var trendTooltip = document.getElementById('trendTooltip');
+      var heatGrid = document.getElementById('heatGrid');
+      var heatTooltip = document.getElementById('heatTooltip');
+      var resultTimers = [];
+      var activePattern = 0;
+      var patternShares = [26, 25, 15, 11, 7, 6, 6, 4];
+      var parkingData = {
+        '桂湾河公园停车场': {
+          address: '桂湾河南街与鲤鱼门二街交叉口西北处',
+          capacity: '2000个',
+          usage: '工作日55%；非工作日65%'
+        },
+        '前海梦工场二期停车场': {
+          address: '前海梦工场二期南侧地库入口',
+          capacity: '1260个',
+          usage: '工作日62%；非工作日48%'
+        },
+        '前海石公园停车场': {
+          address: '前海石公园东侧停车场入口',
+          capacity: '820个',
+          usage: '工作日51%；非工作日67%'
+        },
+        '前海运动公园停车场': {
+          address: '前海运动公园北门地下停车场',
+          capacity: '950个',
+          usage: '工作日58%；非工作日71%'
+        }
+      };
+      function tell(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(function () { toast.classList.remove('show'); }, 1600);
+      }
+      function showScreen(id) {
+        screenIds.forEach(function (screenId) {
+          document.getElementById(screenId).classList.toggle('active', screenId === id);
+        });
+        if (id === 'config') setConfigOpen(false);
+        if (id === 'result') startResultExperience();
+        else stopResultExperience();
+        window.scrollTo(0, 0);
+      }
+      function setConfigOpen(open) {
+        configPopover.hidden = !open;
+        customMode.classList.toggle('is-open', open);
+        customMode.setAttribute('aria-expanded', String(open));
+        if (!open) closeAllCustomSelects();
+      }
+      function setCustomSelectOpen(select, open) {
+        var dropdown = select.querySelector('.ant-select-dropdown');
+        var trigger = select.querySelector('.ant-select-trigger');
+        select.classList.toggle('open', open);
+        dropdown.hidden = !open;
+        trigger.setAttribute('aria-expanded', String(open));
+      }
+      function closeAllCustomSelects(except) {
+        document.querySelectorAll('.ant-select.open').forEach(function (select) {
+          if (select !== except) setCustomSelectOpen(select, false);
+        });
+      }
+      function selectCustomOption(option) {
+        var select = option.closest('.ant-select');
+        var value = option.getAttribute('data-value');
+        select.querySelector('.ant-select-value').textContent = value;
+        select.querySelectorAll('.ant-select-option').forEach(function (item) {
+          var isSelected = item === option;
+          item.classList.toggle('selected', isSelected);
+          item.setAttribute('aria-selected', String(isSelected));
+        });
+        setCustomSelectOpen(select, false);
+        tell('已选择：' + value);
+      }
+      function runHomeLoading(isRefresh) {
+        window.clearTimeout(loadingTimer);
+        homeLoading.classList.add('active');
+        homeLoading.setAttribute('aria-busy', 'true');
+        loadingTimer = window.setTimeout(function () {
+          homeLoading.classList.remove('active');
+          homeLoading.setAttribute('aria-busy', 'false');
+          if (isRefresh) tell('数据更新成功');
+        }, 1250);
+      }
+      function clearResultTimers() {
+        resultTimers.forEach(function (timer) { window.clearTimeout(timer); });
+        resultTimers = [];
+      }
+      function scheduleResult(callback, delay) {
+        resultTimers.push(window.setTimeout(callback, delay));
+      }
+      function setThinkingStep(index) {
+        thinkingSteps.forEach(function (step, stepIndex) { step.classList.toggle('active', stepIndex <= index); });
+      }
+      function appendStreamLine(copy) {
+        var line = document.createElement('p');
+        line.className = 'ai-stream-line';
+        line.textContent = copy;
+        aiStream.appendChild(line);
+        conversationFeed.scrollTop = conversationFeed.scrollHeight;
+      }
+      function selectPattern(index) {
+        activePattern = (Number(index) + patternShares.length) % patternShares.length;
+        donutValue.textContent = patternShares[activePattern] + '%';
+        donutLabel.textContent = '模式' + (activePattern + 1);
+        document.querySelectorAll('#patternLegend [data-action="select-pattern"]').forEach(function (button, buttonIndex) {
+          button.classList.toggle('active', buttonIndex === activePattern);
+          button.setAttribute('aria-pressed', String(buttonIndex === activePattern));
+        });
+      }
+      function formatHour(value) {
+        return String(Math.floor(value)).padStart(2, '0') + ':' + String(Math.round((value % 1) * 60)).padStart(2, '0');
+      }
+      function buildHeatmap() {
+        if (!heatGrid || heatGrid.childElementCount) return;
+        for (var row = 0; row < 8; row += 1) {
+          for (var column = 0; column < 20; column += 1) {
+            var level = 0;
+            if ((row === 5 && column >= 6 && column <= 15) || (row === 6 && column >= 7 && column <= 16)) level = column > 9 && column < 14 ? 3 : 2;
+            if (row === 4 && column >= 5 && column <= 10) level = column > 6 && column < 9 ? 2 : 1;
+            if (row === 1 && column >= 11 && column <= 17) level = column > 13 && column < 16 ? 3 : 2;
+            if (row === 0 && column >= 16) level = 2;
+            if (row === 3 && column >= 9 && column <= 12) level = 2;
+            var start = column * 1.2;
+            var end = (column + 1) * 1.2;
+            var cell = document.createElement('button');
+            cell.type = 'button';
+            cell.className = 'heat-cell' + (level ? ' level-' + level : '');
+            cell.setAttribute('data-action', 'heat-cell');
+            cell.setAttribute('data-mode', String(8 - row));
+            cell.setAttribute('data-time', formatHour(start) + '–' + formatHour(end));
+            cell.setAttribute('data-level', level === 3 ? '高' : level === 2 ? '适中' : level === 1 ? '低' : '很低');
+            cell.setAttribute('aria-label', '模式' + (8 - row) + '，' + formatHour(start) + '至' + formatHour(end) + '，占用强度' + (level === 3 ? '高' : level === 2 ? '适中' : level === 1 ? '低' : '很低'));
+            heatGrid.appendChild(cell);
+          }
+        }
+      }
+      function startResultExperience(question) {
+        clearResultTimers();
+        buildHeatmap();
+        if (question) resultQuestion.textContent = question;
+        resultScreen.classList.remove('ai-complete');
+        resultScreen.classList.add('ai-thinking');
+        aiStream.replaceChildren();
+        thinkingTitle.textContent = '正在深度思考';
+        thinkingStatus.textContent = '正在读取停车记录并建立分析维度…';
+        setThinkingStep(0);
+        resultMapPanel.hidden = true;
+        resultMapToggle.setAttribute('aria-expanded', 'false');
+        resultDocument.scrollTop = 0;
+        conversationFeed.scrollTop = 0;
+        scheduleResult(function () {
+          thinkingStatus.textContent = '正在对 260 名月卡用户进行停车行为聚类…';
+          setThinkingStep(1);
+        }, 560);
+        scheduleResult(function () {
+          thinkingStatus.textContent = '已识别 8 类稳定停车模式，正在比对高峰与短停机会…';
+          setThinkingStep(2);
+        }, 1180);
+        scheduleResult(function () { appendStreamLine('已完成 30 天停车记录清洗，并按入场时段、停留时长和到访频率建立聚类维度。'); }, 1660);
+        scheduleResult(function () { appendStreamLine('识别到工作日 07:30–19:30 为核心高占用时段；午间短停和夜间临停是可优化的增量机会。'); }, 2110);
+        scheduleResult(function () { appendStreamLine('已生成 8 类停车模式与对应运营建议，完整报告已在右侧准备就绪。'); }, 2560);
+        scheduleResult(function () {
+          resultScreen.classList.remove('ai-thinking');
+          resultScreen.classList.add('ai-complete');
+          thinkingTitle.textContent = '分析完成';
+          thinkingStatus.textContent = '已完成模式聚类与经营建议生成。';
+          setThinkingStep(2);
+          selectPattern(0);
+        }, 3020);
+      }
+      function stopResultExperience() {
+        clearResultTimers();
+      }
+      function updateResultTab() {
+        if (!resultScreen.classList.contains('ai-complete')) return;
+        var threshold = resultDocument.scrollTop + 96;
+        var currentId = 'reportComposition';
+        ['reportComposition', 'reportFeature', 'reportConclusion'].forEach(function (id) {
+          var section = document.getElementById(id);
+          if (section && section.offsetTop <= threshold) currentId = id;
+        });
+        document.querySelectorAll('.doc-tabs [data-action="result-tab"]').forEach(function (button) {
+          var isActive = button.getAttribute('data-target') === currentId;
+          button.classList.toggle('active', isActive);
+          button.setAttribute('aria-selected', String(isActive));
+        });
+      }
+      function selectParking(name) {
+        var data = parkingData[name] || parkingData['桂湾河公园停车场'];
+        input.value = name;
+        mapSearch.classList.remove('open');
+        document.querySelectorAll('.map-label').forEach(function (label) {
+          label.classList.toggle('selected', label.getAttribute('data-parking') === name);
+        });
+        document.querySelectorAll('.suggestion').forEach(function (suggestion) {
+          suggestion.classList.toggle('selected', suggestion.getAttribute('data-parking') === name);
+        });
+        detailName.textContent = name;
+        detailAddress.textContent = data.address;
+        detailCapacity.textContent = data.capacity;
+        detailUsage.textContent = data.usage;
+        parkingDetail.hidden = false;
+      }
+      function clearParkingSelection() {
+        document.querySelectorAll('.map-label.selected').forEach(function (label) { label.classList.remove('selected'); });
+        document.querySelectorAll('.suggestion.selected').forEach(function (suggestion) { suggestion.classList.remove('selected'); });
+        parkingDetail.hidden = true;
+      }
+      function updateRange(delta) {
+        var next = Math.min(1, Math.max(0, Number(range.value) + delta));
+        range.value = next.toFixed(1);
+        rangeValue.textContent = range.value;
+      }
+      input.addEventListener('focus', function () { mapSearch.classList.add('open'); });
+      input.addEventListener('input', function () { mapSearch.classList.add('open'); });
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { mapSearch.classList.remove('open'); input.blur(); }
+        if (event.key === 'Enter') {
+          selectParking(input.value.trim() || '桂湾河公园停车场');
+          tell('已定位停车场：' + input.value);
+        }
+      });
+      range.addEventListener('input', function () { rangeValue.textContent = range.value; });
+      document.addEventListener('change', function (event) {
+        if (event.target.matches('.switch')) { tell(event.target.checked ? '设置已开启' : '设置已关闭'); }
+      });
+      document.addEventListener('click', function (event) {
+        if (!event.target.closest('#customMode, #configPopover')) setConfigOpen(false);
+        if (!event.target.closest('.ant-select')) closeAllCustomSelects();
+        var node = event.target.closest('[data-action]');
+        if (!node) return;
+        var action = node.getAttribute('data-action');
+        if (action === 'toggle-config') setConfigOpen(configPopover.hidden);
+        if (action === 'toggle-select') {
+          var select = node.closest('.ant-select');
+          var shouldOpen = !select.classList.contains('open');
+          closeAllCustomSelects(select);
+          setCustomSelectOpen(select, shouldOpen);
+        }
+        if (action === 'select-option') selectCustomOption(node);
+        if (action === 'toast') tell(node.getAttribute('data-message') || '操作成功');
+        if (action === 'search') { mapSearch.classList.add('open'); input.focus(); }
+        if (action === 'clear-search') { input.value = ''; clearParkingSelection(); mapSearch.classList.add('open'); input.focus(); }
+        if (action === 'select-parking') {
+          selectParking(node.getAttribute('data-parking') || node.textContent.trim());
+          tell('已选择停车场：' + input.value);
+        }
+        if (action === 'refresh-home') runHomeLoading(true);
+        if (action === 'detail-tab') {
+          document.querySelectorAll('.fee-tabs button').forEach(function (button) { button.classList.toggle('active', button === node); });
+          var copy = {
+            '区域卡': ['1、工作日和非工作日均首小时10元，第二小时起5元/小时；', '2、封顶60元/1天'],
+            '小时卡': ['1、按小时计费，首小时8元，之后每小时4元；', '2、夜间时段封顶40元'],
+            '普通月卡': ['1、普通月卡680元/月，限固定车牌使用；', '2、月卡用户享受夜间优先停车权益']
+          }[node.getAttribute('data-fee')];
+          feeCopy.innerHTML = '<span>' + copy[0] + '</span><span>' + copy[1] + '</span>';
+        }
+        if (action === 'ask') {
+          document.getElementById('homeChat').value = node.getAttribute('data-message');
+          document.getElementById('homeChat').focus();
+          tell('已将问题填入对话框');
+        }
+        if (action === 'open-analysis') showScreen('config');
+        if (action === 'back-home') showScreen('home');
+        if (action === 'send-analysis') { tell('正在生成停车模式分析…'); window.setTimeout(function () { showScreen('result'); }, 450); }
+        if (action === 'send-chat') {
+          var chatInput = document.getElementById(node.getAttribute('data-input'));
+          var text = chatInput.value.trim();
+          if (!text) { tell('请输入想问的问题'); chatInput.focus(); }
+          else if (chatInput.id === 'resultChat') {
+            resultQuestion.textContent = text;
+            chatInput.value = '';
+            startResultExperience(text);
+            tell('已开始新的深度分析');
+          } else { tell('消息已发送：' + text); chatInput.value = ''; }
+        }
+        if (action === 'reconfigure') showScreen('config');
+        if (action === 'range-minus') updateRange(-0.1);
+        if (action === 'range-plus') updateRange(0.1);
+        if (action === 'rerun-result') { startResultExperience(); tell('正在重新生成分析报告'); }
+        if (action === 'result-followup') {
+          var followup = node.getAttribute('data-question');
+          resultQuestion.textContent = followup;
+          startResultExperience(followup);
+          tell('已开始补充分析');
+        }
+        if (action === 'toggle-result-map') {
+          var shouldShowMap = resultMapPanel.hidden;
+          resultMapPanel.hidden = !shouldShowMap;
+          resultMapToggle.setAttribute('aria-expanded', String(shouldShowMap));
+        }
+        if (action === 'mini-map-marker') tell(node.getAttribute('data-message') || '已定位停车场');
+        if (action === 'result-tab') {
+          var target = document.getElementById(node.getAttribute('data-target'));
+          document.querySelectorAll('.doc-tabs [data-action="result-tab"]').forEach(function (button) {
+            var isActive = button === node;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-selected', String(isActive));
+          });
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (action === 'select-pattern') selectPattern(node.getAttribute('data-pattern'));
+        if (action === 'cycle-pattern') selectPattern(activePattern + 1);
+        if (action === 'trend-point') {
+          document.querySelectorAll('.trend-point').forEach(function (point) { point.classList.toggle('active', point === node); });
+          trendTooltip.innerHTML = '<b>时间：' + node.getAttribute('data-time') + '</b><br>模式数量：' + node.getAttribute('data-count');
+        }
+        if (action === 'heat-cell') {
+          document.querySelectorAll('.heat-cell.active').forEach(function (cell) { cell.classList.remove('active'); });
+          node.classList.add('active');
+          heatTooltip.innerHTML = '<b>模式' + node.getAttribute('data-mode') + '</b> · ' + node.getAttribute('data-time') + '，占用强度：' + node.getAttribute('data-level');
+        }
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') return;
+        closeAllCustomSelects();
+        setConfigOpen(false);
+      });
+      resultDocument.addEventListener('scroll', updateResultTab, { passive: true });
+      document.addEventListener('keydown', function (event) {
+        if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.trend-point, .map-marker')) {
+          event.preventDefault();
+          event.target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        }
+      });
+      runHomeLoading(false);
+    })();
+  </script>
+</body>
+</html>
